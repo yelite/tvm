@@ -892,4 +892,50 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
       p->stream << Downcast<Target>(obj)->str();
     });
 
+void Print(const ObjectRef& obj, std::ostream& os, int indent = 0) {
+  auto indent_string = ::std::string(indent, ' ');
+  auto inner_indent_string = ::std::string(indent + 2, ' ');
+  if (obj->IsInstance<MapNode>()) {
+    auto map = Downcast<Map<ObjectRef, ObjectRef>>(obj);
+    os << "{\n";
+    bool is_first = true;
+    for (auto pair : map) {
+      if (!is_first) {
+        os << ",\n";
+      }
+      is_first = false;
+      os << inner_indent_string;
+      Print(pair.first, os);
+      os << ": ";
+      Print(pair.second, os, indent + 2);
+    }
+    os << "\n" << indent_string << "}";
+  } else if (obj->IsInstance<ArrayNode>()) {
+    auto array = Downcast<Array<ObjectRef>>(obj);
+    os << "[\n";
+    bool is_first = true;
+    for (auto elem : array) {
+      if (!is_first) {
+        os << ",\n";
+      }
+      is_first = false;
+      os << inner_indent_string;
+      Print(elem, os, indent + 2);
+    }
+    os << "\n" << indent_string << "]";
+  } else {
+    os << obj;
+  }
+}
+
+TVM_REGISTER_GLOBAL("tvm_homework.main").set_body_typed([]() {
+  auto str =
+      "{\"key1\": 12345, \"key2\": {\"key3\": 23456, \"key4\": \"linghao\"}, \"key5\": [1, 2, 3]}";
+
+  const auto* parse_func = tvm::runtime::Registry::Get("tvm_homework.parse_json_string");
+  auto parsed_obj = (*parse_func)(str);
+  Print(parsed_obj, std::cout);
+  return true;
+});
+
 }  // namespace tvm

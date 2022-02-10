@@ -704,3 +704,8 @@ def _load_config_dict(config_dict_str):
         if not isinstance(key, str):
             return None
     return config
+
+
+@_register_func("tvm_homework.parse_json_string")
+def _parse_json_string(json_str):
+    return json.loads(json_str)
