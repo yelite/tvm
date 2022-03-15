@@ -23,168 +23,147 @@
 #define TVM_TVMSCRIPT_UNIFIED_PRINTER_H_
 
 #include <tvm/node/node.h>
-
-#include "tvm/runtime/container/map.h"
+#include <tvm/runtime/container/map.h>
+#include "tvm/relay/expr.h"
 
 namespace tvm {
 
-// Code Element
+// Code Doc
 
-class CodeElementNode : public Object {
+class DocNode : public Object {
  public:
   ObjectRef origin_ir_node;
 
-  CodeElementNode(ObjectRef origin_ir_node) : origin_ir_node(origin_ir_node) {}
-  virtual ~CodeElementNode() = default;
+  DocNode() = default;
+  virtual ~DocNode() = default;
 
-  static constexpr const char* _type_key = "script.elements.CodeElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(CodeElementNode, Object);
+  static constexpr const char* _type_key = "script.Docs.CodeDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(DocNode, Object);
 };
 
-class CodeElement : public ObjectRef {
+class Doc : public ObjectRef {
  public:
-  explicit CodeElement(ObjectRef origin_ir_node) {
-    data_ = make_object<CodeElementNode>(origin_ir_node);
-  }
-
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(CodeElement, ObjectRef, CodeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(Doc, ObjectRef, DocNode);
 };
 
-// Base Expr Element
+// Base Expr Doc
 
-class ExprElementNode : public CodeElementNode {
+class ExprDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.BaseExprElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(ExprElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.BaseExprDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(ExprDocNode, DocNode);
 };
 
-class ExprElement : public CodeElement {
+class ExprDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ExprElement, CodeElement, ExprElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ExprDoc, Doc, ExprDocNode);
 };
 
-// Attributes Element
+// String Doc
 
-class AttributesElementNode : public CodeElementNode {
- public:
-  Map<String, ExprElement> attrs;
-
-  static constexpr const char* _type_key = "script.elements.AttributesElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(AttributesElementNode, Object);
-};
-
-class AttributesElement : public CodeElement {
- public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(AttributesElement, CodeElement, AttributesElementNode);
-};
-
-// Const Expr Element
-
-class ConstElementNode : public ExprElementNode {
- public:
-  static constexpr const char* _type_key = "script.elements.ConstElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(ConstElementNode, ExprElementNode);
-};
-
-class ConstElement : public ExprElement {
- public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ConstElement, ExprElement, ConstElementNode);
-};
-
-// String Element
-
-class StringElementNode : public ConstElementNode {
+class LiteralStringDocNode : public ExprDocNode {
  public:
   String value;
 
-  static constexpr const char* _type_key = "script.elements.StirngElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(StringElementNode, ConstElementNode);
+  static constexpr const char* _type_key = "script.Docs.StirngDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(LiteralStringDocNode, ExprDocNode);
 };
 
-class StringElement : public ConstElement {
+class LiteralStringDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(StringElement, ConstElement, StringElementNode);
+  LiteralStringDoc(String value) {
+    auto node = make_object<LiteralStringDocNode>();
+    node->value = std::move(value);
+    data_ = std::move(node);
+  }
+
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(LiteralStringDoc, ExprDoc, LiteralStringDocNode);
 };
 
-// Number Element
+// Number Doc
 
-class NumberElementNode : public ConstElementNode {
+class LiteralNumberDocNode : public ExprDocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.NumberElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(NumberElementNode, ConstElementNode);
+  static constexpr const char* _type_key = "script.Docs.NumberDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(LiteralNumberDocNode, ExprDocNode);
 
  private:
   ObjectRef value_;
 };
 
-class NumberElement : public ConstElement {
+class LiteralNumberDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(NumberElement, ConstElement, NumberElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(LiteralNumberDoc, ExprDoc, LiteralNumberDocNode);
 };
 
-// TIR Builder Element
+// TIR Builder Doc
 
-class TIRBuilderConstElementNode : public ConstElementNode {
+class TIRBuilderConstDocNode : public ExprDocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.TIRBuilderConstElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(TIRBuilderConstElementNode, ConstElementNode);
+  static constexpr const char* _type_key = "script.Docs.TIRBuilderConstDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(TIRBuilderConstDocNode, ExprDocNode);
 };
 
-class TIRBuilderConstElement : public ConstElement {
+class TIRBuilderConstDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TIRBuilderConstElement, ConstElement, TIRBuilderConstElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TIRBuilderConstDoc, ExprDoc,
+                                        TIRBuilderConstDocNode);
 };
 
-// Name Element
+// Name Doc
 
-class IdentElementNode : public ExprElementNode {
+class IdentifierDocNode : public ExprDocNode {
  public:
   String name;
 
-  static constexpr const char* _type_key = "script.elements.NameElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(IdentElementNode, ExprElementNode);
+  IdentifierDocNode(String name) : name(std::move(name)) {}
+
+  static constexpr const char* _type_key = "script.Docs.NameDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(IdentifierDocNode, ExprDocNode);
 };
 
-class IdentElement : public ExprElement {
+class IdentifierDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(IdentElement, ExprElement, IdentElementNode);
+  IdentifierDoc(String name) { data_ = make_object<IdentifierDocNode>(std::move(name)); };
+
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(IdentifierDoc, ExprDoc, IdentifierDocNode);
 };
 
-// Attr Element
+// Attr Doc
 
-class MemberAccessElementNode : public ExprElementNode {
+class MemberAccessDocNode : public ExprDocNode {
  public:
-  ExprElement value;
-  IdentElement ident;
+  ExprDoc value;
+  IdentifierDoc ident;
 
-  static constexpr const char* _type_key = "script.elements.MemberAccessElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(MemberAccessElementNode, ExprElementNode);
+  static constexpr const char* _type_key = "script.Docs.MemberAccessDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(MemberAccessDocNode, ExprDocNode);
 };
 
-class MemberAccessElement : public ExprElement {
+class MemberAccessDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(MemberAccessElement, ExprElement, MemberAccessElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(MemberAccessDoc, ExprDoc, MemberAccessDocNode);
 };
 
-// Index Element
+// Index Doc
 
-class IndexElementNode : public ExprElementNode {
+class IndexDocNode : public ExprDocNode {
  public:
-  ExprElement value;
-  ExprElement index;
+  ExprDoc value;
+  ExprDoc index;
 
-  static constexpr const char* _type_key = "script.elements.IndexElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(IndexElementNode, ExprElementNode);
+  static constexpr const char* _type_key = "script.Docs.IndexDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(IndexDocNode, ExprDocNode);
 };
 
-class IndexElement : public ExprElement {
+class IndexDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(IndexElement, ExprElement, IndexElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(IndexDoc, ExprDoc, IndexDocNode);
 };
 
-// BinOp Element
+// BinOp Doc
 
-class BinOpElementNode : public ExprElementNode {
+class BinOpDocNode : public ExprDocNode {
  public:
   enum class BinOpKind {
     Plus,
@@ -192,270 +171,268 @@ class BinOpElementNode : public ExprElementNode {
   };
 
   BinOpKind kind;
-  ExprElement lhs;
-  ExprElement rhs;
+  ExprDoc lhs;
+  ExprDoc rhs;
 
-  static constexpr const char* _type_key = "script.elements.BinOpElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(BinOpElementNode, ExprElementNode);
+  static constexpr const char* _type_key = "script.Docs.BinOpDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(BinOpDocNode, ExprDocNode);
 };
 
-class BinOpElement : public ExprElement {
+class BinOpDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(BinOpElement, ExprElement, BinOpElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(BinOpDoc, ExprDoc, BinOpDocNode);
 };
 
-// Call Element
+// Call Doc
 
-class CallElementNode : public ExprElementNode {
+class CallDocNode : public ExprDocNode {
  public:
-  ExprElement callee;
-  Array<ExprElement> args;
+  ExprDoc callee;
+  Array<ExprDoc> args;
 
-  static constexpr const char* _type_key = "script.elements.CallElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(CallElementNode, ExprElementNode);
+  static constexpr const char* _type_key = "script.Docs.CallDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(CallDocNode, ExprDocNode);
 };
 
-class CallElement : public ExprElement {
+class CallDoc : public ExprDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(CallElement, ExprElement, CallElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(CallDoc, ExprDoc, CallDocNode);
 };
 
-// Base Stmt Element
+// Base Stmt Doc
 
-class StmtElementNode : public CodeElementNode {
+class StmtDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.StmtElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(StmtElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.StmtDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(StmtDocNode, DocNode);
 };
 
-class StmtElement : public CodeElement {
+class StmtDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(StmtElement, CodeElement, StmtElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(StmtDoc, Doc, StmtDocNode);
 };
 
-// Assign Element
+// Assign Doc
 
-class AssignElementNode : public StmtElementNode {
+class AssignDocNode : public StmtDocNode {
  public:
-  ExprElement target;
-  ExprElement value;
+  ExprDoc target;
+  ExprDoc value;
 
-  static constexpr const char* _type_key = "script.elements.AssignElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(AssignElementNode, StmtElementNode);
+  static constexpr const char* _type_key = "script.Docs.AssignDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(AssignDocNode, StmtDocNode);
 };
 
-class AssignElement : public StmtElement {
+class AssignDoc : public StmtDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(AssignElement, StmtElement, AssignElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(AssignDoc, StmtDoc, AssignDocNode);
 };
 
-// For Element
+// For Doc
 
-class ForElementNode : public StmtElementNode {
+class ForDocNode : public StmtDocNode {
  public:
-  ExprElement target;
-  ExprElement iter;
-  Array<StmtElement> body;
+  ExprDoc target;
+  ExprDoc iter;
+  Array<StmtDoc> body;
 
-  static constexpr const char* _type_key = "script.elements.ForElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(ForElementNode, StmtElementNode);
+  static constexpr const char* _type_key = "script.Docs.ForDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ForDocNode, StmtDocNode);
 };
 
-class ForElement : public StmtElement {
+class ForDoc : public StmtDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ForElement, StmtElement, ForElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ForDoc, StmtDoc, ForDocNode);
 };
 
-// Scope Element
+// Scope Doc
 
-class ScopeElementNode : public StmtElementNode {
+class ScopeDocNode : public StmtDocNode {
  public:
-  ExprElement scope;
-  AttributesElement attrs;
-  Array<StmtElement> body;
+  ExprDoc scope;
+  Array<StmtDoc> body;
 
-  static constexpr const char* _type_key = "script.elements.ScopeElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(ScopeElementNode, StmtElementNode);
+  static constexpr const char* _type_key = "script.Docs.ScopeDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ScopeDocNode, StmtDocNode);
 };
 
-class ScopeElement : public StmtElement {
+class ScopeDoc : public StmtDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ScopeElement, StmtElement, ScopeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
 };
 
-// Type Param Element
+// Type Param Doc
 
-class TypeParamElementNode : public CodeElementNode {
+class TypeParamDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.TypeParamElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(TypeParamElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.TypeParamDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(TypeParamDocNode, DocNode);
 };
 
-class TypeParamElement : public CodeElement {
+class TypeParamDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeParamElement, CodeElement, TypeParamElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeParamDoc, Doc, TypeParamDocNode);
 };
 
-// String Type Param Element
+// String Type Param Doc
 
-class StringTypeParamElementNode : public TypeParamElementNode {
+class StringTypeParamDocNode : public TypeParamDocNode {
  public:
-  StringElement value;
+  LiteralStringDoc value;
 
-  static constexpr const char* _type_key = "script.elements.StringTypeParamElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(StringTypeParamElementNode, TypeParamElementNode);
+  static constexpr const char* _type_key = "script.Docs.StringTypeParamDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(StringTypeParamDocNode, TypeParamDocNode);
 };
 
-class StringTypeParamElement : public TypeParamElement {
+class StringTypeParamDoc : public TypeParamDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(StringTypeParamElement, TypeParamElement,
-                                        StringTypeParamElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(StringTypeParamDoc, TypeParamDoc,
+                                        StringTypeParamDocNode);
 };
 
-// Number Type Param Element
+// Number Type Param Doc
 
-class NumberTypeParamElementNode : public TypeParamElementNode {
+class NumberTypeParamDocNode : public TypeParamDocNode {
  public:
-  NumberElement value;
+  LiteralNumberDoc value;
 
-  static constexpr const char* _type_key = "script.elements.NumberTypeParamElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeParamElementNode, TypeParamElementNode);
+  static constexpr const char* _type_key = "script.Docs.NumberTypeParamDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeParamDocNode, TypeParamDocNode);
 };
 
-class NumberTypeParamElement : public TypeParamElement {
+class NumberTypeParamDoc : public TypeParamDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(NumberTypeParamElement, TypeParamElement,
-                                        NumberTypeParamElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(NumberTypeParamDoc, TypeParamDoc,
+                                        NumberTypeParamDocNode);
 };
 
-// Tuple Type Param Element
+// Tuple Type Param Doc
 
-class TupleTypeParamElementNode : public TypeParamElementNode {
+class TupleTypeParamDocNode : public TypeParamDocNode {
  public:
-  Array<TypeParamElement> elements;
+  Array<TypeParamDoc> Docs;
 
-  static constexpr const char* _type_key = "script.elements.TupleTypeParamElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(TupleTypeParamElementNode, TypeParamElementNode);
+  static constexpr const char* _type_key = "script.Docs.TupleTypeParamDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(TupleTypeParamDocNode, TypeParamDocNode);
 };
 
-class TupleTypeParamElement : public TypeParamElement {
+class TupleTypeParamDoc : public TypeParamDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TupleTypeParamElement, TypeParamElement,
-                                        TupleTypeParamElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TupleTypeParamDoc, TypeParamDoc,
+                                        TupleTypeParamDocNode);
 };
 
-// Type Type Param Element
+// Type Type Param Doc
 
-class TypeTypeParamElementNode : public TypeParamElementNode {
+class TypeTypeParamDocNode : public TypeParamDocNode {
  public:
-  ConstElement type;  // TODO: Can we solve the circular def here?
+  Doc type;  // TODO: Can we solve the circular def here?
 
-  static constexpr const char* _type_key = "script.elements.TypeTypeParamElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(TypeTypeParamElementNode, TypeParamElementNode);
+  static constexpr const char* _type_key = "script.Docs.TypeTypeParamDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(TypeTypeParamDocNode, TypeParamDocNode);
 };
 
-class TypeTypeParamElement : public TypeParamElement {
+class TypeTypeParamDoc : public TypeParamDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeTypeParamElement, TypeParamElement,
-                                        TypeTypeParamElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeTypeParamDoc, TypeParamDoc,
+                                        TypeTypeParamDocNode);
 };
 
-// Primitive Type Element
+// Primitive Type Doc
 
-class PrimitiveTypeElementNode : public CodeElementNode {
+class PrimitiveTypeDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.elements.PrimitiveTypeElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(PrimitiveTypeElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.PrimitiveTypeDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(PrimitiveTypeDocNode, DocNode);
 };
 
-class PrimitiveTypeElement : public CodeElement {
+class PrimitiveTypeDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(PrimitiveTypeElement, CodeElement,
-                                        PrimitiveTypeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(PrimitiveTypeDoc, Doc,
+                                        PrimitiveTypeDocNode);
 };
 
-// Number Type Element
+// Number Type Doc
 
-class NumberTypeElementNode : public PrimitiveTypeElementNode {
+class NumberTypeDocNode : public PrimitiveTypeDocNode {
  public:
   DataType dtype;
 
-  static constexpr const char* _type_key = "script.elements.NumberTypeElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeElementNode, PrimitiveTypeElementNode);
+  static constexpr const char* _type_key = "script.Docs.NumberTypeDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeDocNode, PrimitiveTypeDocNode);
 };
 
-class NumberTypeElement : public PrimitiveTypeElement {
+class NumberTypeDoc : public PrimitiveTypeDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(NumberTypeElement, PrimitiveTypeElement,
-                                        NumberTypeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(NumberTypeDoc, PrimitiveTypeDoc,
+                                        NumberTypeDocNode);
 };
 
-// TVM Type Element
+// TVM Type Doc
 
-class TVMTypeElementNode : public PrimitiveTypeElementNode {
+class TVMTypeDocNode : public PrimitiveTypeDocNode {
  public:
   enum class Kind { Buffer, Handle };
 
   Kind kind;
 
-  static constexpr const char* _type_key = "script.elements.TVMTypeElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeElementNode, PrimitiveTypeElementNode);
+  static constexpr const char* _type_key = "script.Docs.TVMTypeDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(NumberTypeDocNode, PrimitiveTypeDocNode);
 };
 
-class TVMTypeElement : public PrimitiveTypeElement {
+class TVMTypeDoc : public PrimitiveTypeDoc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TVMTypeElement, PrimitiveTypeElement, TVMTypeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TVMTypeDoc, PrimitiveTypeDoc, TVMTypeDocNode);
 };
 
-// Type Element
+// Type Doc
 
-class TypeElementNode : public CodeElementNode {
+class TypeDocNode : public DocNode {
  public:
-  PrimitiveTypeElement base;
-  Array<TypeParamElement> params;
+  PrimitiveTypeDoc base;
+  Array<TypeParamDoc> params;
 
-  static constexpr const char* _type_key = "script.elements.TypeElement";
-  TVM_DECLARE_BASE_OBJECT_INFO(TypeElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.TypeDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(TypeDocNode, DocNode);
 };
 
-class TypeElement : public CodeElement {
+class TypeDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeElement, CodeElement, TypeElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(TypeDoc, Doc, TypeDocNode);
 };
 
-// Function Arg Element
+// Function Arg Doc
 
-class FunctionArgElementNode : public CodeElementNode {
+class FunctionArgDocNode : public DocNode {
  public:
-  IdentElement ident;
-  TypeElement type;
+  IdentifierDoc ident;
+  TypeDoc type;
 
-  static constexpr const char* _type_key = "script.elements.FunctionArgElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionArgElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.FunctionArgDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionArgDocNode, DocNode);
 };
 
-class FunctionArgElement : public CodeElement {
+class FunctionArgDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(FunctionArgElement, CodeElement, FunctionArgElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(FunctionArgDoc, Doc, FunctionArgDocNode);
 };
 
-// Function Element
+// Function Doc
 
-class FunctionElementNode : public CodeElementNode {
+class FunctionDocNode : public DocNode {
  public:
-  IdentElement name;
-  Array<FunctionArgElement> args;
-  TypeElement return_type;
-  AttributesElement attrs;
-  Array<StmtElement> stmts;
+  IdentifierDoc name;
+  Array<FunctionArgDoc> args;
+  TypeDoc return_type;
+  Array<StmtDoc> stmts;
 
-  static constexpr const char* _type_key = "script.elements.FunctionElement";
-  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionElementNode, CodeElementNode);
+  static constexpr const char* _type_key = "script.Docs.FunctionDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, DocNode);
 };
 
-class FunctionElement : public CodeElement {
+class FunctionDoc : public Doc {
  public:
-  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(FunctionElement, CodeElement, FunctionElementNode);
+  TVM_DEFINE_MUTABLE_OBJECT_REF_METHODS(FunctionDoc, Doc, FunctionDocNode);
 };
 
 }  // namespace tvm
