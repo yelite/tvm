@@ -26,6 +26,7 @@
 #include <tvm/runtime/container/map.h>
 
 #include <initializer_list>
+#include <utility>
 
 #include "tvm/relay/expr.h"
 #include "tvm/runtime/object.h"
@@ -64,15 +65,17 @@ class ExprDoc : public Doc {
  public:
   static ExprDoc TIRBuilder();
   static ExprDoc None();
-  static ExprDoc TIRBuilderAttribute(String name);
+
+  template <typename ...AttrType>
+  static ExprDoc TIRBuilderAttribute(AttrType&&... name);
 
   ExprDoc AccessAttr(String attr);
 
-  template <typename T>
-  ExprDoc CallWith(T&& args);
+  template <typename... ArgType>
+  ExprDoc CallWith(ArgType&&... args);
 
-  template <typename T>
-  ExprDoc IndexWith(T&& args);
+  template <typename... IndexType>
+  ExprDoc IndexWith(IndexType&&... args);
 
   ExprDoc() : ExprDoc(make_object<ExprDocNode>()){};
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ExprDoc, Doc, ExprDocNode);
@@ -134,17 +137,17 @@ class IdentifierDocNode : public ExprDocNode {
  public:
   String name;
 
-  IdentifierDocNode() {}
-  IdentifierDocNode(const String& name) : name(name) {}
-  IdentifierDocNode(String&& name) : name(std::move(name)) {}
-
   static constexpr const char* _type_key = "script.Docs.IdentidierDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(IdentifierDocNode, ExprDocNode);
 };
 
 class IdentifierDoc : public ExprDoc {
  public:
-  IdentifierDoc(String name) { data_ = make_object<IdentifierDocNode>(std::move(name)); };
+  IdentifierDoc(String name) {
+    auto node = make_object<IdentifierDocNode>();
+    node->name = std::move(name);
+    data_ = std::move(node);
+  };
 
   IdentifierDoc() : IdentifierDoc(make_object<IdentifierDocNode>()){};
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(IdentifierDoc, ExprDoc, IdentifierDocNode);
@@ -254,7 +257,14 @@ inline ExprDoc ExprDoc::None() {
   return ConstDoc(make_object<ConstDocNode>(ConstDocNode::ConstKind::None));
 }
 
-inline ExprDoc ExprDoc::TIRBuilderAttribute(String name) { return TIRBuilder().AccessAttr(name); }
+template <typename ...AttrType>
+inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) { 
+    auto result = TIRBuilder();
+    for (auto& name: std::initializer_list<std::common_type_t<AttrType...>>{names...}) {
+        result = result.AccessAttr(name);
+    }
+    return result;
+}
 
 inline ExprDoc ExprDoc::AccessAttr(String attr) {
   AttrAccessDoc expr;
@@ -263,19 +273,19 @@ inline ExprDoc ExprDoc::AccessAttr(String attr) {
   return expr;
 }
 
-template <typename T>
-inline ExprDoc ExprDoc::CallWith(T&& args) {
+template <typename... ArgType>
+inline ExprDoc ExprDoc::CallWith(ArgType&&... args) {
   CallDoc expr;
   expr->callee = *this;
-  expr->args = std::forward<T>(args);
+  expr->args = {std::forward<ArgType>(args)...};
   return expr;
 }
 
-template <typename T>
-inline ExprDoc ExprDoc::IndexWith(T&& args) {
+template <typename... IndexType>
+inline ExprDoc ExprDoc::IndexWith(IndexType&&... args) {
   IndexDoc expr;
   expr->value = *this;
-  expr->indices = std::forward<T>(args);
+  expr->indices = {std::forward<IndexType>(args)...};
   return expr;
 }
 
@@ -291,10 +301,12 @@ class TypeDoc : public Doc {
  public:
   TypeDoc() : TypeDoc(make_object<TypeDocNode>()){};
 
-  static TypeDoc TIRPrimitive(String name);
+  template <typename ...AttrType>
+  static TypeDoc TIRPrimitive(AttrType&&... names);
   static TypeDoc NoneType();
-  TypeDoc CallWith(std::initializer_list<TypeDoc> args);
-  TypeDoc CallWith(std::vector<TypeDoc> args);
+
+  template <typename ...ArgType>
+  TypeDoc CallWith(ArgType&&... args);
 
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TypeDoc, Doc, TypeDocNode);
 };
@@ -330,7 +342,7 @@ class ExprTypeDoc : public TypeDoc {
 class TypeCallDocNode : public TypeDocNode {
  public:
   TypeDoc base;
-  Array<TypeDoc> params;
+  Array<TypeDoc> args;
 
   static constexpr const char* _type_key = "script.Docs.TypeCall";
   TVM_DECLARE_BASE_OBJECT_INFO(TypeCallDocNode, TypeDocNode);
@@ -344,24 +356,19 @@ class TypeCallDoc : public TypeDoc {
 
 // Helper methods for type
 
-inline TypeDoc TypeDoc::TIRPrimitive(String name) {
-  auto expr = ExprDoc::TIRBuilderAttribute(name);
+template <typename ...AttrType>
+inline TypeDoc TypeDoc::TIRPrimitive(AttrType&&... names) {
+  auto expr = ExprDoc::TIRBuilderAttribute(names...);
   return ExprTypeDoc(std::move(expr));
 }
 
 inline TypeDoc TypeDoc::NoneType() { return ExprTypeDoc(ExprDoc::None()); }
 
-inline TypeDoc TypeDoc::CallWith(std::initializer_list<TypeDoc> args) {
+template <typename ...ArgType>
+inline TypeDoc TypeDoc::CallWith(ArgType&&... args) {
   TypeCallDoc ty;
   ty->base = *this;
-  ty->params = args;
-  return ty;
-}
-
-inline TypeDoc TypeDoc::CallWith(std::vector<TypeDoc> args) {
-  TypeCallDoc ty;
-  ty->base = *this;
-  ty->params = args;
+  ty->args = { std::forward<ArgType>(args)... };
   return ty;
 }
 
@@ -425,7 +432,7 @@ class AssignDocNode : public StmtDocNode {
 
   AssignKind kind = AssignKind::Regular;
   ExprDoc target;
-  Optional<ExprDoc> value; // If null, this doc represents declaration, e.g. `A: T.Buffer[(1,2)]`
+  Optional<ExprDoc> value;  // If null, this doc represents declaration, e.g. `A: T.Buffer[(1,2)]`
   Optional<TypeDoc> type;
 
   static constexpr const char* _type_key = "script.Docs.AssignDoc";

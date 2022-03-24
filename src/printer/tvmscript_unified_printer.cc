@@ -127,7 +127,7 @@ class PythonDocPrinter : public DocPrinter {
   virtual void PrintDoc(const LiteralValueDoc& doc) override {
     auto& value = doc->value;
     if (value->IsInstance<FloatImmNode>() || value->IsInstance<IntImmNode>()) {
-      PrintNumber(Downcast<PrimExpr>(doc->value));
+      PrintNumberNode(Downcast<PrimExpr>(doc->value));
     } else if (value->IsInstance<StringObj>()) {
       PrintStringLiteral(Downcast<String>(value));
     } else if (value->IsInstance<tir::StringImmNode>()) {
@@ -141,7 +141,7 @@ class PythonDocPrinter : public DocPrinter {
         output_ << tir_prefix_;
         break;
       case ConstDocNode::ConstKind::RelaxBuilder:
-        LOG(FATAL) << "RelaxBuilder constant not supported";
+        LOG(FATAL) << "RelaxBuilder constant not supported yet";
         break;
       case ConstDocNode::ConstKind::None:
         output_ << "None";
@@ -159,21 +159,7 @@ class PythonDocPrinter : public DocPrinter {
 
   virtual void PrintDoc(const IndexDoc& doc) override {
     PrintDoc(doc->value);
-    output_ << "[";
-    bool is_first = true;
-    for (auto& index : doc->indices) {
-      if (is_first) {
-        is_first = false;
-      } else {
-        output_ << ", ";
-      }
-      PrintDoc(index);
-    }
-    if (is_first) {
-      // zero indices
-      output_ << "()";
-    }
-    output_ << "]";
+    PrintJoinedElements("[", doc->indices, ", ", "]", "()");
   };
 
   virtual void PrintDoc(const OperationDoc& doc) override {
@@ -200,26 +186,20 @@ class PythonDocPrinter : public DocPrinter {
 
   virtual void PrintDoc(const CallDoc& doc) override {
     PrintDoc(doc->callee);
-    output_ << '(';
-    bool is_first = true;
-    for (const auto& arg : doc->args) {
-      if (is_first) {
-        is_first = false;
-      } else {
-        output_ << ", ";
-      }
-      PrintDoc(arg);
-    }
-    output_ << ')';
+    PrintJoinedElements("(", doc->args, ", ", ")");
   };
 
   virtual void PrintDoc(const TupleDoc& doc) override {
-    output_ << "(";
-    for (const auto& element : doc->elements) {
-      PrintDoc(element);
-      output_ << ", ";
+    auto size = doc->elements.size();
+    if (size == 0) {
+      output_ << "tuple()";
+    } else if (size == 1) {
+      output_ << "(";
+      PrintDoc(doc->elements[0]);
+      output_ << ",)";
+    } else {
+      PrintJoinedElements("(", doc->elements, ", ", ")");
     }
-    output_ << ")";
   };
 
   virtual void PrintDoc(const SeqStmtDoc& doc) override {
@@ -264,37 +244,20 @@ class PythonDocPrinter : public DocPrinter {
 
   virtual void PrintDoc(const TypeCallDoc& doc) override {
     PrintDoc(doc->base);
-    output_ << "[";
-    bool is_first = true;
-    for (const auto& param : doc->params) {
-      if (is_first) {
-        is_first = false;
-      } else {
-        output_ << ", ";
-      }
-      PrintDoc(param);
-    }
-    output_ << "]";
+    PrintJoinedElements("[", doc->args, ", ", "]");
   };
+
   virtual void PrintDoc(const FunctionDoc& doc) override {
     NewLine() << "@" << tir_prefix_ << ".prim_func";
     NewLine() << "def ";
     PrintDoc(doc->name);
-    output_ << "(";
-    bool is_first = true;
-    for (auto& arg : doc->args) {
-      if (is_first) {
-        is_first = false;
-      } else {
-        output_ << ", ";
-      }
-      PrintDoc(arg);
-    }
-    output_ << ") -> ";
+    PrintJoinedElements("(", doc->args, ", ", ")");
+    output_ << " -> ";
     PrintDoc(doc->return_type);
     output_ << ":";
     PrintWithIncreasedIndent(doc->body);
   };
+
   virtual void PrintDoc(const FunctionArgDoc& doc) override {
     PrintDoc(doc->name);
     output_ << ": ";
@@ -316,21 +279,42 @@ class PythonDocPrinter : public DocPrinter {
     DecreaseIndent();
   }
 
-  template <typename... Arg>
-  std::string TIRPrimitiveCall(const std::string& primitive, const Arg&... args) {
-    std::ostringstream result;
-    result << tir_prefix_ << "." << primitive << "(";
+  template <typename ContainerType>
+  void PrintJoinedElements(const std::string& left, const ContainerType& elements,
+                           const std::string& separator, const std::string& right,
+                           const std::string& default_content = "") {
+    output_ << left;
     bool is_first = true;
-    for (const auto& arg : {args...}) {
+    for (auto& element : elements) {
       if (is_first) {
         is_first = false;
       } else {
-        result << ", ";
+        output_ << separator;
       }
-      result << arg;
+      PrintObject(element);
     }
-    result << ")";
-    return result.str();
+    if (is_first) {
+      // This means that `elements` is empty
+      output_ << default_content;
+    }
+    output_ << right;
+  }
+
+  template <typename... Arg>
+  void PrintTIRPrimitiveCall(const std::string& primitive, Arg... args) {
+    std::ostringstream result;
+    result << tir_prefix_ << "." << primitive;
+    PrintJoinedElements("(", std::vector<typename std::common_type_t<Arg...>>{args...}, ", ", ")");
+  }
+
+  template <typename ObjType>
+  std::enable_if_t<std::is_base_of<Doc, ObjType>::value, void> PrintObject(const ObjType& obj) {
+    PrintDoc(obj);
+  }
+
+  template <typename ObjType>
+  std::enable_if_t<!std::is_base_of<Doc, ObjType>::value, void> PrintObject(const ObjType& obj) {
+    output_ << obj;
   }
 
   void PrintStringLiteral(const String& string) {
@@ -338,7 +322,7 @@ class PythonDocPrinter : public DocPrinter {
     output_ << "\"" << string << "\"";
   }
 
-  void PrintNumber(const PrimExpr& expr) {
+  void PrintNumberNode(const PrimExpr& expr) {
     auto& dtype = expr->dtype;
     std::ostringstream number_value;
 
@@ -356,7 +340,7 @@ class PythonDocPrinter : public DocPrinter {
     } else if (dtype == DataType::Bool()) {
       output_ << (Downcast<IntImm>(expr)->value ? "True" : "False");
     } else {
-      output_ << TIRPrimitiveCall(runtime::DLDataType2String(dtype), number_value.str());
+      PrintTIRPrimitiveCall(runtime::DLDataType2String(dtype), number_value.str());
     }
   };
 };
@@ -426,7 +410,7 @@ TypeDoc TVMScriptUnifiedPrinter::GetBufferTypeDoc(const Buffer& buf) {
   TypeCallDoc type_doc;
   type_doc->base = TypeDoc::TIRPrimitive("buffer");
   for (auto d : ToExprDocArray(buf->shape)) {
-    type_doc->params.push_back(ExprTypeDoc(d));
+    type_doc->args.push_back(ExprTypeDoc(d));
   }
   return type_doc;
 }
@@ -446,19 +430,18 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
       }
       func_doc->name = func_name;
 
-      std::vector<FunctionArgDoc> params;
+      auto& params = func_doc->args;
       for (const auto& param : func->params) {
         auto it = func->buffer_map.find(param);
         if (it != func->buffer_map.end()) {
           // Buffer
           const Buffer& buf = (*it).second;
-          params.emplace_back(p.ToDoc<IdentifierDoc>(buf), p.GetBufferTypeDoc(buf));
+          params.push_back({p.ToDoc<IdentifierDoc>(buf), p.GetBufferTypeDoc(buf)});
         } else {
           // Var
-          params.emplace_back(p.ToDoc<IdentifierDoc>(param), p.GetVarTypeDoc(param));
+          params.push_back({p.ToDoc<IdentifierDoc>(param), p.GetVarTypeDoc(param)});
         }
       }
-      func_doc->args = std::move(params);
       func_doc->return_type = p.ToDoc<TypeDoc>(func->ret_type);
 
       SeqStmtDoc body;
@@ -483,8 +466,6 @@ SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptU
   SeqStmtDoc doc;
   const auto block = block_realize->block;
   ICHECK_EQ(block->iter_vars.size(), block_realize->iter_values.size());
-
-  auto axis_expr = ExprDoc::TIRBuilderAttribute("axis");
 
   // TODO: handle remap
 
@@ -513,14 +494,14 @@ SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptU
         break;
     }
     const Range& dom = iter_var->dom;
-    ExprDoc arg_dom;
+    ExprDoc dom_arg;
     if (is_zero(dom->min)) {
-      arg_dom = p.ToExprDoc(dom->extent);
+      dom_arg = p.ToExprDoc(dom->extent);
     } else {
-      arg_dom = TupleDoc{p.ToExprDoc(dom->min), p.ToExprDoc(dom->min + dom->extent)};
+      dom_arg = TupleDoc{p.ToExprDoc(dom->min), p.ToExprDoc(dom->min + dom->extent)};
     }
-    assign_stmt->value = axis_expr.AccessAttr(axis_type).CallWith(
-        std::initializer_list<ExprDoc>{arg_dom, p.ToExprDoc(value)});
+    assign_stmt->value = ExprDoc::TIRBuilderAttribute("axis", std::move(axis_type))
+                             .CallWith(std::move(dom_arg), p.ToExprDoc(value));
 
     doc.Add(assign_stmt);
   }
@@ -535,8 +516,8 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
       ScopeDoc scope_doc;
       // TODO: optional info
       // print block name and block vars
-      scope_doc->scope = ExprDoc::TIRBuilderAttribute("block").CallWith(
-          std::initializer_list<ExprDoc>{LiteralValueDoc(block->name_hint)});
+      scope_doc->scope =
+          ExprDoc::TIRBuilderAttribute("block").CallWith(LiteralValueDoc(block->name_hint));
 
       SeqStmtDoc body;
 
@@ -563,10 +544,10 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
       doc->target = p.ToDoc<IdentifierDoc>(for_ref->loop_var);
       auto for_kind = ExprDoc::TIRBuilderAttribute(ForKind2String(for_ref->kind));
       if (is_zero(for_ref->min)) {
-        doc->iter = for_kind.CallWith(std::initializer_list<ExprDoc>{p.ToExprDoc(for_ref->extent)});
+        doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->extent));
       } else {
-        doc->iter = for_kind.CallWith(std::initializer_list<ExprDoc>{
-            p.ToExprDoc(for_ref->min), p.ToExprDoc(for_ref->min + for_ref->extent)});
+        doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->min),
+                                      p.ToExprDoc(for_ref->min + for_ref->extent));
       }
       // TODO: annotation, thread binding
       doc->body = p.ToDoc<StmtDoc>(for_ref->body);
@@ -646,7 +627,7 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
   TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)                                \
       .set_dispatch<OpNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc { \
         const auto* node = n.as<OpNode>();                                              \
-        OperationDoc doc;                                                                   \
+        OperationDoc doc;                                                               \
         doc->kind = OperationDocNode::OperationKind::OpKind;                            \
         doc->operands = {p.ToExprDoc(node->a), p.ToExprDoc(node->b)};                   \
         return doc;                                                                     \
