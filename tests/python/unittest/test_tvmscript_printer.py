@@ -32,9 +32,6 @@ def test_roundtrippable_basic():
     expected = """
         @T.prim_func
         def main(A: T.Buffer[8, "float32"], B: T.Buffer[8, "float32"]) -> None:
-            # function attr dict
-            T.func_attr({"global_symbol": "main", "tir.noalias": True})
-            # with T.block("root")
             for i in T.serial(8):
                 with T.block("B"):
                     vi = T.axis.spatial(8, i)
@@ -48,11 +45,10 @@ def test_roundtrippable_basic_fragment():
     buffer_store_node = main.body.block.body.body.block.body
 
     expected = """
+        B: T.Buffer[8, "float32"]
         vi: T.int32
         A: T.Buffer[8, "float32"]
-        B: T.Buffer[8, "float32"]
 
         B[vi] = A[vi] + T.float32(1)
     """
     assert to_tvmscript(buffer_store_node) == format_script(expected)
-

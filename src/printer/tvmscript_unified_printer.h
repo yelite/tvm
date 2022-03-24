@@ -29,6 +29,7 @@
 #include <utility>
 
 #include "tvm/relay/expr.h"
+#include "tvm/runtime/container/array.h"
 #include "tvm/runtime/object.h"
 
 namespace tvm {
@@ -66,7 +67,7 @@ class ExprDoc : public Doc {
   static ExprDoc TIRBuilder();
   static ExprDoc None();
 
-  template <typename ...AttrType>
+  template <typename... AttrType>
   static ExprDoc TIRBuilderAttribute(AttrType&&... name);
 
   ExprDoc AccessAttr(String attr);
@@ -257,13 +258,13 @@ inline ExprDoc ExprDoc::None() {
   return ConstDoc(make_object<ConstDocNode>(ConstDocNode::ConstKind::None));
 }
 
-template <typename ...AttrType>
-inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) { 
-    auto result = TIRBuilder();
-    for (auto& name: std::initializer_list<std::common_type_t<AttrType...>>{names...}) {
-        result = result.AccessAttr(name);
-    }
-    return result;
+template <typename... AttrType>
+inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) {
+  auto result = TIRBuilder();
+  for (auto& name : std::initializer_list<std::common_type_t<AttrType...>>{names...}) {
+    result = result.AccessAttr(name);
+  }
+  return result;
 }
 
 inline ExprDoc ExprDoc::AccessAttr(String attr) {
@@ -301,11 +302,11 @@ class TypeDoc : public Doc {
  public:
   TypeDoc() : TypeDoc(make_object<TypeDocNode>()){};
 
-  template <typename ...AttrType>
+  template <typename... AttrType>
   static TypeDoc TIRPrimitive(AttrType&&... names);
   static TypeDoc NoneType();
 
-  template <typename ...ArgType>
+  template <typename... ArgType>
   TypeDoc CallWith(ArgType&&... args);
 
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TypeDoc, Doc, TypeDocNode);
@@ -356,7 +357,7 @@ class TypeCallDoc : public TypeDoc {
 
 // Helper methods for type
 
-template <typename ...AttrType>
+template <typename... AttrType>
 inline TypeDoc TypeDoc::TIRPrimitive(AttrType&&... names) {
   auto expr = ExprDoc::TIRBuilderAttribute(names...);
   return ExprTypeDoc(std::move(expr));
@@ -364,11 +365,11 @@ inline TypeDoc TypeDoc::TIRPrimitive(AttrType&&... names) {
 
 inline TypeDoc TypeDoc::NoneType() { return ExprTypeDoc(ExprDoc::None()); }
 
-template <typename ...ArgType>
+template <typename... ArgType>
 inline TypeDoc TypeDoc::CallWith(ArgType&&... args) {
   TypeCallDoc ty;
   ty->base = *this;
-  ty->args = { std::forward<ArgType>(args)... };
+  ty->args = {std::forward<ArgType>(args)...};
   return ty;
 }
 
@@ -480,6 +481,26 @@ class ScopeDoc : public StmtDoc {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
 };
 
+// ExprStmt Doc
+class ExprStmtDocNode : public StmtDocNode {
+ public:
+  ExprDoc expr;
+
+  static constexpr const char* _type_key = "script.Docs.ExprStmtDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ExprStmtDocNode, StmtDocNode);
+};
+
+class ExprStmtDoc : public StmtDoc {
+ public:
+  ExprStmtDoc() : ExprStmtDoc(make_object<ExprStmtDocNode>()){};
+  ExprStmtDoc(ExprDoc expr) {
+    auto node = make_object<ExprStmtDocNode>();
+    node->expr = std::move(expr);
+    data_ = std::move(node);
+  };
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ExprStmtDoc, StmtDoc, ExprStmtDocNode);
+};
+
 // Function Arg Doc
 
 class FunctionArgDocNode : public DocNode {
@@ -521,6 +542,112 @@ class FunctionDoc : public Doc {
  public:
   FunctionDoc() : FunctionDoc(make_object<FunctionDocNode>()){};
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(FunctionDoc, Doc, FunctionDocNode);
+};
+
+// Printer Context
+
+class PrinterBaseContextNode : public Object {
+ public:
+  static constexpr const char* _type_key = "script.PrinterBaseContext";
+  TVM_DECLARE_BASE_OBJECT_INFO(PrinterBaseContextNode, Object);
+};
+
+class PrinterBaseContext : public ObjectRef {
+ public:
+  PrinterBaseContext() { data_ = make_object<PrinterBaseContextNode>(); }
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterBaseContext, runtime::ObjectRef,
+                                                    PrinterBaseContextNode);
+};
+
+class PrinterFunctionContextNode : public PrinterBaseContextNode {
+ public:
+  static constexpr const char* _type_key = "script.PrinterFunctionContext";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterFunctionContextNode, Object);
+};
+
+class PrinterFunctionContext : public PrinterBaseContext {
+ public:
+  PrinterFunctionContext() { data_ = make_object<PrinterFunctionContextNode>(); }
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterFunctionContext, PrinterBaseContext,
+                                                    PrinterFunctionContextNode);
+};
+
+class PrinterLoopContextNode : public PrinterBaseContextNode {
+ public:
+  static constexpr const char* _type_key = "script.PrinterLoopContext";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterLoopContextNode, Object);
+};
+
+class PrinterLoopContext : public PrinterBaseContext {
+ public:
+  PrinterLoopContext() { data_ = make_object<PrinterLoopContextNode>(); }
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterLoopContext, PrinterBaseContext,
+                                                    PrinterLoopContextNode);
+};
+
+class PrinterBlockContextNode : public PrinterBaseContextNode {
+ public:
+  static constexpr const char* _type_key = "script.PrinterBlockContext";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterBlockContextNode, Object);
+};
+
+class PrinterBlockContext : public PrinterBaseContext {
+ public:
+  PrinterBlockContext() { data_ = make_object<PrinterBlockContextNode>(); }
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterBlockContext, PrinterBaseContext,
+                                                    PrinterBlockContextNode);
+};
+
+// TODO: Needs more thought on this
+class PrinterContextManagerNode : public Object {
+ public:
+  Array<PrinterBaseContext> contexts;
+  std::vector<Map<String, ObjectRef>> symbol_tables;
+
+  template <typename ContextType>
+  ContextType EnterContext() {
+    ContextType context;
+    contexts.push_back(context);
+    PushNewSymbolTable();
+    return context;
+  }
+
+  void ExitContext(PrinterBaseContext&& context) {
+    // ICHECK_EQ(context, contexts.back())
+    contexts.pop_back();
+    symbol_tables.pop_back();
+  }
+
+  void AddVar(const tir::Buffer& buffer) { symbol_tables.back().Set(buffer->name, buffer); }
+
+  void AddVar(const tir::Var& var) { symbol_tables.back().Set(var->name_hint, var); }
+
+  Optional<ObjectRef> GetVar(const String& name) {
+    if (symbol_tables.empty()) {
+      return Optional<ObjectRef>();
+    }
+    auto current_table = symbol_tables.back();
+    return current_table.Get(name);
+  }
+
+  static constexpr const char* _type_key = "script.PrinterContextManager";
+  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterContextManagerNode, Object);
+
+ private:
+  void PushNewSymbolTable() {
+    if (symbol_tables.empty()) {
+      symbol_tables.emplace_back();
+    } else {
+      symbol_tables.emplace_back(symbol_tables.back());
+    }
+  }
+};
+
+class PrinterContextManager : public ObjectRef {
+ public:
+  PrinterContextManager() { data_ = make_object<PrinterContextManagerNode>(); }
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterContextManager, runtime::ObjectRef,
+                                                    PrinterContextManagerNode);
 };
 
 }  // namespace script
