@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <string>
 
+#include "tvm/ir/expr.h"
 #include "tvm/runtime/container/array.h"
 #include "tvm/runtime/container/string.h"
 #include "tvm/runtime/object.h"
@@ -33,6 +34,7 @@
 #include "tvm/tir/stmt.h"
 
 namespace tvm {
+namespace script {
 
 using namespace tir;
 
@@ -40,49 +42,323 @@ class DocPrinter {
  public:
   virtual ~DocPrinter() = default;
 
-  virtual String Print(CodeDoc doc) {};
+  virtual String Print(Doc doc) {
+    output_.str("");
+    PrintDoc(doc);
+    auto result = output_.str();
+    output_.str("");
+    return result;
+  };
 
  protected:
-  virtual void Print(const CodeDoc& doc){};
+  virtual void PrintDoc(const Doc& doc) {
+    if (doc->IsInstance<LiteralValueDocNode>()) {
+      PrintDoc(Downcast<LiteralValueDoc>(doc));
+    } else if (doc->IsInstance<ConstDocNode>()) {
+      PrintDoc(Downcast<ConstDoc>(doc));
+    } else if (doc->IsInstance<IdentifierDocNode>()) {
+      PrintDoc(Downcast<IdentifierDoc>(doc));
+    } else if (doc->IsInstance<AttrAccessDocNode>()) {
+      PrintDoc(Downcast<AttrAccessDoc>(doc));
+    } else if (doc->IsInstance<IndexDocNode>()) {
+      PrintDoc(Downcast<IndexDoc>(doc));
+    } else if (doc->IsInstance<OperationDocNode>()) {
+      PrintDoc(Downcast<OperationDoc>(doc));
+    } else if (doc->IsInstance<CallDocNode>()) {
+      PrintDoc(Downcast<CallDoc>(doc));
+    } else if (doc->IsInstance<TupleDocNode>()) {
+      PrintDoc(Downcast<TupleDoc>(doc));
+    } else if (doc->IsInstance<SeqStmtDocNode>()) {
+      PrintDoc(Downcast<SeqStmtDoc>(doc));
+    } else if (doc->IsInstance<ScopeDocNode>()) {
+      PrintDoc(Downcast<ScopeDoc>(doc));
+    } else if (doc->IsInstance<ForDocNode>()) {
+      PrintDoc(Downcast<ForDoc>(doc));
+    } else if (doc->IsInstance<AssignDocNode>()) {
+      PrintDoc(Downcast<AssignDoc>(doc));
+    } else if (doc->IsInstance<ExprTypeDocNode>()) {
+      PrintDoc(Downcast<ExprTypeDoc>(doc));
+    } else if (doc->IsInstance<TypeCallDocNode>()) {
+      PrintDoc(Downcast<TypeCallDoc>(doc));
+    } else if (doc->IsInstance<FunctionDocNode>()) {
+      PrintDoc(Downcast<FunctionDoc>(doc));
+    } else if (doc->IsInstance<FunctionArgDocNode>()) {
+      PrintDoc(Downcast<FunctionArgDoc>(doc));
+    } else {
+      LOG(FATAL) << "Do not know how to print " << doc->GetTypeKey();
+    }
+  };
 
-  virtual void Print(const LiteralStringDoc& doc) = 0;
-  virtual void Print(const LiteralNumberDoc& doc) = 0;
-  virtual void Print(const ConstDoc& doc) = 0;
-  virtual void Print(const IdentifierDoc& doc) = 0;
-  virtual void Print(const AttrAccessDoc& doc) = 0;
-  virtual void Print(const IndexDoc& doc) = 0;
-  virtual void Print(const BinOpDoc& doc) = 0;
-  virtual void Print(const CallDoc& doc) = 0;
-  virtual void Print(const TupleDoc& doc) = 0;
-  virtual void Print(const SeqStmtDoc& doc) = 0;
-  virtual void Print(const ScopeDoc& doc) = 0;
-  virtual void Print(const ForDoc& doc) = 0;
-  virtual void Print(const AssignDoc& doc) = 0;
-  virtual void Print(const ExprTypeDoc& doc) = 0;
-  virtual void Print(const TypeCallDoc& doc) = 0;
-  virtual void Print(const FunctionDoc& doc) = 0;
-  virtual void Print(const FunctionArgDoc& doc) = 0;
+  virtual void PrintDoc(const LiteralValueDoc& doc) = 0;
+  virtual void PrintDoc(const ConstDoc& doc) = 0;
+  virtual void PrintDoc(const IdentifierDoc& doc) = 0;
+  virtual void PrintDoc(const AttrAccessDoc& doc) = 0;
+  virtual void PrintDoc(const IndexDoc& doc) = 0;
+  virtual void PrintDoc(const OperationDoc& doc) = 0;
+  virtual void PrintDoc(const CallDoc& doc) = 0;
+  virtual void PrintDoc(const TupleDoc& doc) = 0;
+  virtual void PrintDoc(const SeqStmtDoc& doc) = 0;
+  virtual void PrintDoc(const ScopeDoc& doc) = 0;
+  virtual void PrintDoc(const ForDoc& doc) = 0;
+  virtual void PrintDoc(const AssignDoc& doc) = 0;
+  virtual void PrintDoc(const ExprTypeDoc& doc) = 0;
+  virtual void PrintDoc(const TypeCallDoc& doc) = 0;
+  virtual void PrintDoc(const FunctionDoc& doc) = 0;
+  virtual void PrintDoc(const FunctionArgDoc& doc) = 0;
+
+  using OutputStream = std::ostringstream;
+
+  OutputStream& NewLine() {
+    output_ << "\n" << std::string(indent_, ' ');
+    return output_;
+  }
+
+  OutputStream output_;
+  int indent_ = 0;
 };
 
 class PythonDocPrinter : public DocPrinter {
+ public:
+  PythonDocPrinter(String tir_prefix) : tir_prefix_(tir_prefix) {}
+
  protected:
-  virtual void Print(const LiteralStringDoc& doc){};
-  virtual void Print(const LiteralNumberDoc& doc){};
-  virtual void Print(const ConstDoc& doc){};
-  virtual void Print(const IdentifierDoc& doc){};
-  virtual void Print(const AttrAccessDoc& doc){};
-  virtual void Print(const IndexDoc& doc){};
-  virtual void Print(const BinOpDoc& doc){};
-  virtual void Print(const CallDoc& doc){};
-  virtual void Print(const TupleDoc& doc){};
-  virtual void Print(const SeqStmtDoc& doc){};
-  virtual void Print(const ScopeDoc& doc){};
-  virtual void Print(const ForDoc& doc){};
-  virtual void Print(const AssignDoc& doc){};
-  virtual void Print(const ExprTypeDoc& doc){};
-  virtual void Print(const TypeCallDoc& doc){};
-  virtual void Print(const FunctionDoc& doc){};
-  virtual void Print(const FunctionArgDoc& doc){};
+  using DocPrinter::PrintDoc;
+
+  virtual void PrintDoc(const LiteralValueDoc& doc) override {
+    auto& value = doc->value;
+    if (value->IsInstance<FloatImmNode>() || value->IsInstance<IntImmNode>()) {
+      PrintNumber(Downcast<PrimExpr>(doc->value));
+    } else if (value->IsInstance<StringObj>()) {
+      PrintStringLiteral(Downcast<String>(value));
+    } else if (value->IsInstance<tir::StringImmNode>()) {
+      PrintStringLiteral(Downcast<StringImm>(value)->value);
+    }
+  };
+
+  virtual void PrintDoc(const ConstDoc& doc) override {
+    switch (doc->kind) {
+      case ConstDocNode::ConstKind::TIRBuilder:
+        output_ << tir_prefix_;
+        break;
+      case ConstDocNode::ConstKind::RelaxBuilder:
+        LOG(FATAL) << "RelaxBuilder constant not supported";
+        break;
+      case ConstDocNode::ConstKind::None:
+        output_ << "None";
+        break;
+    }
+  };
+
+  virtual void PrintDoc(const IdentifierDoc& doc) override { output_ << doc->name; };
+
+  virtual void PrintDoc(const AttrAccessDoc& doc) override {
+    PrintDoc(doc->value);
+    output_ << ".";
+    PrintDoc(doc->attr);
+  };
+
+  virtual void PrintDoc(const IndexDoc& doc) override {
+    PrintDoc(doc->value);
+    output_ << "[";
+    bool is_first = true;
+    for (auto& index : doc->indices) {
+      if (is_first) {
+        is_first = false;
+      } else {
+        output_ << ", ";
+      }
+      PrintDoc(index);
+    }
+    if (is_first) {
+      // zero indices
+      output_ << "()";
+    }
+    output_ << "]";
+  };
+
+  virtual void PrintDoc(const OperationDoc& doc) override {
+    PrintDoc(doc->operands[0]);
+    switch (doc->kind) {
+      case OperationDocNode::OperationKind::Add:
+        output_ << " + ";
+        break;
+      case OperationDocNode::OperationKind::Sub:
+        output_ << " - ";
+        break;
+      case OperationDocNode::OperationKind::Mul:
+        output_ << " * ";
+        break;
+      case OperationDocNode::OperationKind::Div:
+        output_ << " / ";
+        break;
+      case OperationDocNode::OperationKind::FloorDiv:
+        output_ << " // ";
+        break;
+    }
+    PrintDoc(doc->operands[1]);
+  };
+
+  virtual void PrintDoc(const CallDoc& doc) override {
+    PrintDoc(doc->callee);
+    output_ << '(';
+    bool is_first = true;
+    for (const auto& arg : doc->args) {
+      if (is_first) {
+        is_first = false;
+      } else {
+        output_ << ", ";
+      }
+      PrintDoc(arg);
+    }
+    output_ << ')';
+  };
+
+  virtual void PrintDoc(const TupleDoc& doc) override {
+    output_ << "(";
+    for (const auto& element : doc->elements) {
+      PrintDoc(element);
+      output_ << ", ";
+    }
+    output_ << ")";
+  };
+
+  virtual void PrintDoc(const SeqStmtDoc& doc) override {
+    for (auto& stmt : doc->seq) {
+      PrintDoc(stmt);
+    }
+  };
+
+  virtual void PrintDoc(const ScopeDoc& doc) override {
+    NewLine() << "with ";
+    PrintDoc(doc->scope);
+    output_ << ":";
+
+    PrintWithIncreasedIndent(doc->body);
+  };
+
+  virtual void PrintDoc(const ForDoc& doc) override {
+    NewLine() << "for ";
+    PrintDoc(doc->target);
+    output_ << " in ";
+    PrintDoc(doc->iter);
+    output_ << ":";
+
+    PrintWithIncreasedIndent(doc->body);
+  };
+
+  virtual void PrintDoc(const AssignDoc& doc) override {
+    // TODO: Assign Kind, Type Annotation
+    NewLine();
+    PrintDoc(doc->target);
+    if (doc->type) {
+      output_ << ": ";
+      PrintDoc(doc->type.value());
+    }
+    if (doc->value) {
+      output_ << " = ";
+      PrintDoc(doc->value.value());
+    }
+  };
+
+  virtual void PrintDoc(const ExprTypeDoc& doc) override { PrintDoc(doc->expr); };
+
+  virtual void PrintDoc(const TypeCallDoc& doc) override {
+    PrintDoc(doc->base);
+    output_ << "[";
+    bool is_first = true;
+    for (const auto& param : doc->params) {
+      if (is_first) {
+        is_first = false;
+      } else {
+        output_ << ", ";
+      }
+      PrintDoc(param);
+    }
+    output_ << "]";
+  };
+  virtual void PrintDoc(const FunctionDoc& doc) override {
+    NewLine() << "@" << tir_prefix_ << ".prim_func";
+    NewLine() << "def ";
+    PrintDoc(doc->name);
+    output_ << "(";
+    bool is_first = true;
+    for (auto& arg : doc->args) {
+      if (is_first) {
+        is_first = false;
+      } else {
+        output_ << ", ";
+      }
+      PrintDoc(arg);
+    }
+    output_ << ") -> ";
+    PrintDoc(doc->return_type);
+    output_ << ":";
+    PrintWithIncreasedIndent(doc->body);
+  };
+  virtual void PrintDoc(const FunctionArgDoc& doc) override {
+    PrintDoc(doc->name);
+    output_ << ": ";
+    PrintDoc(doc->type);
+  };
+
+ private:
+  String tir_prefix_;
+
+  int indent_spaces_ = 4;
+
+  void IncreaseIndent() { indent_ += indent_spaces_; }
+
+  void DecreaseIndent() { indent_ -= indent_spaces_; }
+
+  void PrintWithIncreasedIndent(const Doc& doc) {
+    IncreaseIndent();
+    PrintDoc(doc);
+    DecreaseIndent();
+  }
+
+  template <typename... Arg>
+  std::string TIRPrimitiveCall(const std::string& primitive, const Arg&... args) {
+    std::ostringstream result;
+    result << tir_prefix_ << "." << primitive << "(";
+    bool is_first = true;
+    for (const auto& arg : {args...}) {
+      if (is_first) {
+        is_first = false;
+      } else {
+        result << ", ";
+      }
+      result << arg;
+    }
+    result << ")";
+    return result.str();
+  }
+
+  void PrintStringLiteral(const String& string) {
+    // TODO: Escape and smart quote (choose ' or " automatically)
+    output_ << "\"" << string << "\"";
+  }
+
+  void PrintNumber(const PrimExpr& expr) {
+    auto& dtype = expr->dtype;
+    std::ostringstream number_value;
+
+    if (expr->IsInstance<IntImmNode>()) {
+      number_value << Downcast<IntImm>(expr)->value;
+    } else if (expr->IsInstance<FloatImmNode>()) {
+      number_value.precision(17);
+      number_value << Downcast<FloatImm>(expr)->value;
+    } else {
+      LOG(FATAL) << "Do not know how to process " << expr->GetTypeKey() << " as literal number";
+    }
+
+    if (dtype == DataType::Int(32)) {
+      output_ << number_value.str();
+    } else if (dtype == DataType::Bool()) {
+      output_ << (Downcast<IntImm>(expr)->value ? "True" : "False");
+    } else {
+      output_ << TIRPrimitiveCall(runtime::DLDataType2String(dtype), number_value.str());
+    }
+  };
 };
 
 class TVMScriptUnifiedPrinter {
@@ -90,16 +366,16 @@ class TVMScriptUnifiedPrinter {
   explicit TVMScriptUnifiedPrinter(std::unique_ptr<DocPrinter> element_printer)
       : doc_printer_(std::move(element_printer)){};
 
-  using FType = NodeFunctor<CodeDoc(const ObjectRef&, TVMScriptUnifiedPrinter&)>;
+  using FType = NodeFunctor<Doc(const ObjectRef&, TVMScriptUnifiedPrinter&)>;
   static FType& vtable();
 
   String PrintNode(const ObjectRef& ref);
 
-  template <typename T, typename = std::enable_if_t<std::is_base_of<CodeDoc, T>::value>>
+  template <typename T, typename = std::enable_if_t<std::is_base_of<Doc, T>::value>>
   T ToDoc(const ObjectRef& ref);
 
   template <typename DocType, typename NodeType,
-            typename = std::enable_if_t<std::is_base_of<CodeDoc, DocType>::value>,
+            typename = std::enable_if_t<std::is_base_of<Doc, DocType>::value>,
             typename = std::enable_if_t<std::is_base_of<ObjectRef, NodeType>::value>>
   Array<DocType> ToDocArray(const Array<NodeType>& refs);
 
@@ -111,7 +387,7 @@ class TVMScriptUnifiedPrinter {
     return ToDocArray<ExprDoc>(refs);
   }
 
-  CodeDoc PrintExtraVarDeclaration();
+  Doc PrintExtraVarDeclaration();
 
   TypeDoc GetBufferTypeDoc(const Buffer& buf);
   TypeDoc GetVarTypeDoc(const Var& var);
@@ -126,13 +402,13 @@ TVMScriptUnifiedPrinter::FType& TVMScriptUnifiedPrinter::vtable() {
 }
 
 String TVMScriptUnifiedPrinter::PrintNode(const ObjectRef& ref) {
-  auto element = ToDoc<CodeDoc>(ref);
+  auto element = ToDoc<Doc>(ref);
   return doc_printer_->Print(element);
 }
 
 template <typename T, typename>
 T TVMScriptUnifiedPrinter::ToDoc(const ObjectRef& ref) {
-  CodeDoc element = vtable()(ref, *this);
+  Doc element = vtable()(ref, *this);
   element->origin_ir_node = ref;
   return Downcast<T>(element);
 }
@@ -160,7 +436,7 @@ TypeDoc TVMScriptUnifiedPrinter::GetVarTypeDoc(const Var& var) {
 }
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<PrimFuncNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<PrimFuncNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto func = Downcast<PrimFunc>(n);
       FunctionDoc func_doc;
       String func_name = "func";
@@ -252,7 +528,7 @@ SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptU
 }
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BlockRealizeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<BlockRealizeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto block_realize = Downcast<BlockRealize>(n);
       const auto block = block_realize->block;
 
@@ -260,7 +536,7 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
       // TODO: optional info
       // print block name and block vars
       scope_doc->scope = ExprDoc::TIRBuilderAttribute("block").CallWith(
-          std::initializer_list<ExprDoc>{LiteralStringDoc(block->name_hint)});
+          std::initializer_list<ExprDoc>{LiteralValueDoc(block->name_hint)});
 
       SeqStmtDoc body;
 
@@ -273,14 +549,14 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BlockNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<BlockNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto block = Downcast<Block>(n);
       // TODO: T.alloc_buffer and match_buffer and init
       return p.ToDoc<StmtDoc>(block->body);
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<ForNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<ForNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto for_ref = Downcast<For>(n);
       ForDoc doc;
       // p.onVarEnterScope(for_ref->loop_var);
@@ -299,13 +575,13 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<PrimTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<PrimTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto type = Downcast<PrimType>(n);
       return TypeDoc::TIRPrimitive(runtime::DLDataType2String(type->dtype));
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<TupleTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<TupleTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto type = Downcast<TupleType>(n);
       if (type->fields.empty()) {
         return TypeDoc::NoneType();
@@ -319,14 +595,14 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<BufferNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const Buffer buffer = Downcast<Buffer>(n);
       // p.onBufferUsed(buffer);
       return IdentifierDoc(buffer->name);
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferStoreNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<BufferStoreNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const BufferStore op = Downcast<BufferStore>(n);
       AssignDoc doc;
       auto buf_var = p.ToExprDoc(op->buffer);
@@ -336,45 +612,44 @@ TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<VarNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<VarNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const Var var = Downcast<Var>(n);
       // p.onVarUsed(var);
       return IdentifierDoc(var->name_hint);
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferLoadNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<BufferLoadNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto buffer_load = Downcast<BufferLoad>(n);
       return p.ToExprDoc(buffer_load->buffer).IndexWith(p.ToExprDocArray(buffer_load->indices));
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<FloatImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<FloatImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto node_ref = Downcast<FloatImm>(n);
-      return LiteralNumberDoc(node_ref);
+      return LiteralValueDoc(node_ref);
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<IntImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<IntImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto node_ref = Downcast<IntImm>(n);
-      return LiteralNumberDoc(node_ref);
+      return LiteralValueDoc(node_ref);
     });
 
 TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<StringObj>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc {
+    .set_dispatch<StringObj>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
       const auto s = Downcast<String>(n);
-      return LiteralStringDoc(s);
+      return LiteralValueDoc(s);
     });
 
-#define TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(OpNode, OpKind)                         \
-  TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)                                    \
-      .set_dispatch<OpNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> CodeDoc { \
-        const auto* node = n.as<OpNode>();                                                  \
-        BinOpDoc doc;                                                                       \
-        doc->kind = BinOpDocNode::BinOpKind::OpKind;                                        \
-        doc->lhs = p.ToExprDoc(node->a);                                                    \
-        doc->rhs = p.ToExprDoc(node->b);                                                    \
-        return doc;                                                                         \
+#define TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(OpNode, OpKind)                     \
+  TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)                                \
+      .set_dispatch<OpNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc { \
+        const auto* node = n.as<OpNode>();                                              \
+        OperationDoc doc;                                                                   \
+        doc->kind = OperationDocNode::OperationKind::OpKind;                            \
+        doc->operands = {p.ToExprDoc(node->a), p.ToExprDoc(node->b)};                   \
+        return doc;                                                                     \
       });
 
 TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(MulNode, Mul)
@@ -384,10 +659,11 @@ TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(AddNode, Add)
 TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(SubNode, Sub)
 
 String AsTVMScriptUnified(const ObjectRef& node, const String& tir_prefix) {
-  auto printer = TVMScriptUnifiedPrinter(std::make_unique<PythonDocPrinter>());
+  auto printer = TVMScriptUnifiedPrinter(std::make_unique<PythonDocPrinter>(tir_prefix));
   return printer.PrintNode(node);
 }
 
 TVM_REGISTER_GLOBAL("experiment.AsTVMScript").set_body_typed(AsTVMScriptUnified);
 
+}  // namespace script
 }  // namespace tvm
