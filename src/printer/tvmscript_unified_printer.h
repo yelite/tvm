@@ -233,7 +233,7 @@ class TupleDocNode : public ExprDocNode {
   Array<ExprDoc> elements;
 
   static constexpr const char* _type_key = "script.Docs.TupleDoc";
-  TVM_DECLARE_FINAL_OBJECT_INFO(CallDocNode, ExprDocNode);
+  TVM_DECLARE_FINAL_OBJECT_INFO(TupleDocNode, ExprDocNode);
 };
 
 class TupleDoc : public ExprDoc {

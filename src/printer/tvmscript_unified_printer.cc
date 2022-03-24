@@ -447,10 +447,15 @@ Array<DocType> TVMScriptUnifiedPrinter::ToDocArray(const Array<NodeType>& refs) 
 TypeDoc TVMScriptUnifiedPrinter::GetBufferTypeDoc(const Buffer& buf) {
   TypeCallDoc type_doc;
   type_doc->base = TypeDoc::TIRPrimitive("Buffer");
-  TupleDoc shape_doc;
-  shape_doc->elements = ToExprDocArray(buf->shape);
-  type_doc->args = {ExprTypeDoc(shape_doc),
-                    ExprTypeDoc(LiteralValueDoc(runtime::DLDataType2String(buf->dtype)))};
+
+  if (buf->shape.size() > 1) {
+    TupleDoc shape_doc;
+    shape_doc->elements = ToExprDocArray(buf->shape);
+    type_doc->args.push_back(ExprTypeDoc(shape_doc));
+  } else {
+    type_doc->args.push_back(ExprTypeDoc(ToExprDoc(buf->shape[0])));
+  }
+  type_doc->args.push_back(ExprTypeDoc(LiteralValueDoc(runtime::DLDataType2String(buf->dtype))));
   return type_doc;
 }
 
