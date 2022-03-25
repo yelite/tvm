@@ -261,7 +261,7 @@ inline ExprDoc ExprDoc::None() {
 template <typename... AttrType>
 inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) {
   auto result = TIRBuilder();
-  for (auto& name : std::initializer_list<std::common_type_t<AttrType...>>{names...}) {
+  for (auto& name : std::initializer_list<std::common_type_t<AttrType...>>{std::forward<AttrType>(names)...}) {
     result = result.AccessAttr(name);
   }
   return result;
