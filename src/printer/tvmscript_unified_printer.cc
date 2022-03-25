@@ -24,15 +24,15 @@
 #include <cstdint>
 #include <string>
 
-#include "tvm/ir/expr.h"
-#include "tvm/ir/type.h"
-#include "tvm/runtime/container/array.h"
-#include "tvm/runtime/container/string.h"
-#include "tvm/runtime/object.h"
-#include "tvm/tir/expr.h"
-#include "tvm/tir/function.h"
-#include "tvm/tir/op.h"
-#include "tvm/tir/stmt.h"
+#include <tvm/ir/expr.h>
+#include <tvm/ir/type.h>
+#include <tvm/runtime/container/array.h>
+#include <tvm/runtime/container/string.h>
+#include <tvm/runtime/object.h>
+#include <tvm/tir/expr.h>
+#include <tvm/tir/function.h>
+#include <tvm/tir/op.h>
+#include <tvm/tir/stmt.h>
 
 namespace tvm {
 namespace script {
