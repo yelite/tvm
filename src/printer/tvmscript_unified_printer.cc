@@ -25,6 +25,7 @@
 #include <string>
 
 #include "tvm/ir/expr.h"
+#include "tvm/ir/type.h"
 #include "tvm/runtime/container/array.h"
 #include "tvm/runtime/container/string.h"
 #include "tvm/runtime/object.h"
@@ -50,6 +51,9 @@ class DocPrinter {
       output_ << "\n";
     }
     auto result = output_.str();
+    result.erase(result.begin(), std::find_if(result.begin(), result.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
     output_.str("");
     return result;
   };
@@ -348,13 +352,55 @@ class PythonDocPrinter : public DocPrinter {
   };
 };
 
+class TVMScriptUnifiedPrinter;
+
+// A modified version of NodeFunctor which supports auto downcast
+class DocProducerRegistry {
+ private:
+  using InternalFType = std::function<Doc(const ObjectRef&, TVMScriptUnifiedPrinter&)>;
+
+  template <typename NodeRef, typename DocType>
+  using ProducerType = DocType (*)(const NodeRef&, TVMScriptUnifiedPrinter&);
+
+  std::vector<InternalFType> producers_;
+
+ public:
+  bool can_dispatch(const ObjectRef& n) const {
+    uint32_t type_index = n->type_index();
+    return type_index < producers_.size() && producers_[type_index] != nullptr;
+  }
+
+  Doc operator()(const ObjectRef& n, TVMScriptUnifiedPrinter& p) const {
+    ICHECK(can_dispatch(n)) << "DocProducerRegistry calls un-registered function on type "
+                            << n->GetTypeKey();
+    return producers_[n->type_index()](n, p);
+  }
+
+  template <typename NodeRef, typename DocType>
+  DocProducerRegistry& register_producer(ProducerType<NodeRef, DocType> producer) {
+    using NodeType = typename NodeRef::ContainerType;
+    uint32_t tindex = NodeType::RuntimeTypeIndex();
+    if (producers_.size() <= tindex) {
+      producers_.resize(tindex + 1, nullptr);
+    }
+    ICHECK(producers_[tindex] == nullptr)
+        << "Dispatch for " << NodeType::_type_key << " is already set";
+
+    producers_[tindex] = [producer = std::move(producer)](const ObjectRef& ref,
+                                                          TVMScriptUnifiedPrinter& p) {
+      Doc doc = producer(Downcast<NodeRef>(ref), p);
+      return doc;
+    };
+    return *this;
+  }
+};
+
 class TVMScriptUnifiedPrinter {
  public:
   explicit TVMScriptUnifiedPrinter(std::unique_ptr<DocPrinter> element_printer)
       : doc_printer_(std::move(element_printer)){};
 
-  using FType = NodeFunctor<Doc(const ObjectRef&, TVMScriptUnifiedPrinter&)>;
-  static FType& vtable();
+  static DocProducerRegistry& registry();
 
   String PrintNode(const ObjectRef& ref);
 
@@ -414,8 +460,12 @@ class TVMScriptUnifiedPrinter {
   }
 };
 
-TVMScriptUnifiedPrinter::FType& TVMScriptUnifiedPrinter::vtable() {
-  static FType inst;
+#define TVMSCRIPT_PRINTER_DOC_PRODUCER(Producer)                      \
+  TVM_STR_CONCAT(TVM_REG_FUNC_VAR_DEF(TVMScriptUnifiedPrinter), __COUNTER__) = \
+      TVMScriptUnifiedPrinter::registry().register_producer(+Producer)
+
+DocProducerRegistry& TVMScriptUnifiedPrinter::registry() {
+  static DocProducerRegistry inst;
   return inst;
 }
 
@@ -430,7 +480,7 @@ String TVMScriptUnifiedPrinter::PrintNode(const ObjectRef& ref) {
 
 template <typename T, typename>
 T TVMScriptUnifiedPrinter::ToDoc(const ObjectRef& ref) {
-  Doc element = vtable()(ref, *this);
+  Doc element = registry()(ref, *this);
   element->origin_ir_node = ref;
   return Downcast<T>(element);
 }
@@ -463,54 +513,53 @@ TypeDoc TVMScriptUnifiedPrinter::GetVarTypeDoc(const Var& var) {
   return ToDoc<TypeDoc>(GetType(var));
 }
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<PrimFuncNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto func = Downcast<PrimFunc>(n);
-      FunctionDoc func_doc;
-      auto context = p.context_manager->EnterContext<PrinterFunctionContext>();
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const PrimFunc& n, TVMScriptUnifiedPrinter& p) {
+  const auto func = Downcast<PrimFunc>(n);
+  FunctionDoc func_doc;
+  auto context = p.context_manager->EnterContext<PrinterFunctionContext>();
 
-      String func_name = "func";
-      const auto& it = func->attrs->dict.find("global_symbol");
-      if (it != func->attrs->dict.end()) {
-        func_name = Downcast<String>((*it).second);
-      }
-      func_doc->name = func_name;
+  String func_name = "func";
+  const auto& it = func->attrs->dict.find("global_symbol");
+  if (it != func->attrs->dict.end()) {
+    func_name = Downcast<String>((*it).second);
+  }
+  func_doc->name = func_name;
 
-      auto& params = func_doc->args;
-      for (const auto& param : func->params) {
-        auto it = func->buffer_map.find(param);
-        if (it != func->buffer_map.end()) {
-          // Buffer
-          const Buffer& buf = (*it).second;
-          p.context_manager->AddVar(buf);
-          params.push_back({p.ToDoc<IdentifierDoc>(buf), p.GetBufferTypeDoc(buf)});
-        } else {
-          // Var
-          p.context_manager->AddVar(param);
-          params.push_back({p.ToDoc<IdentifierDoc>(param), p.GetVarTypeDoc(param)});
-        }
-      }
-      func_doc->return_type = p.ToDoc<TypeDoc>(func->ret_type);
+  auto& params = func_doc->args;
+  for (const auto& param : func->params) {
+    auto it = func->buffer_map.find(param);
+    if (it != func->buffer_map.end()) {
+      // Buffer
+      const Buffer& buf = (*it).second;
+      p.context_manager->AddVar(buf);
+      params.push_back({p.ToDoc<IdentifierDoc>(buf), p.GetBufferTypeDoc(buf)});
+    } else {
+      // Var
+      p.context_manager->AddVar(param);
+      params.push_back({p.ToDoc<IdentifierDoc>(param), p.GetVarTypeDoc(param)});
+    }
+  }
+  func_doc->return_type = p.ToDoc<TypeDoc>(func->ret_type);
 
-      SeqStmtDoc body;
+  SeqStmtDoc body;
 
-      ObjectRef body_to_print = func->body;
-      if (func->body->IsInstance<BlockRealizeNode>() &&
-          func->body.as<BlockRealizeNode>()->iter_values.empty()) {
-        const BlockNode* block = func->body.as<BlockRealizeNode>()->block.get();
-        if (block->annotations.empty()) {
-          // Skip print root block
-          body_to_print = GetRef<ObjectRef>(block);
-        }
-      }
-      body.Add(p.ToDoc<StmtDoc>(body_to_print));
+  ObjectRef body_to_print = func->body;
+  if (func->body->IsInstance<BlockRealizeNode>() &&
+      func->body.as<BlockRealizeNode>()->iter_values.empty()) {
+    const BlockNode* block = func->body.as<BlockRealizeNode>()->block.get();
+    if (block->annotations.empty()) {
+      // Skip print root block
+      body_to_print = GetRef<ObjectRef>(block);
+    }
+  }
+  body.Add(p.ToDoc<StmtDoc>(body_to_print));
 
-      func_doc->body = std::move(body);
+  func_doc->body = std::move(body);
 
-      p.context_manager->ExitContext(std::move(context));
+  p.context_manager->ExitContext(std::move(context));
 
-      return func_doc;
-    });
+  return func_doc;
+});
 
 SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptUnifiedPrinter& p) {
   SeqStmtDoc doc;
@@ -558,141 +607,125 @@ SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptU
   return doc;
 }
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BlockRealizeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto block_realize = Downcast<BlockRealize>(n);
-      const auto block = block_realize->block;
-      ScopeDoc scope_doc;
-      auto context = p.context_manager->EnterContext<PrinterBlockContext>();
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const BlockRealize& n, TVMScriptUnifiedPrinter& p) {
+  const auto block_realize = Downcast<BlockRealize>(n);
+  const auto block = block_realize->block;
+  ScopeDoc scope_doc;
+  auto context = p.context_manager->EnterContext<PrinterBlockContext>();
 
-      // TODO: optional info
-      // print block name and block vars
-      scope_doc->scope =
-          ExprDoc::TIRBuilderAttribute("block").CallWith(LiteralValueDoc(block->name_hint));
+  // TODO: optional info
+  // print block name and block vars
+  scope_doc->scope =
+      ExprDoc::TIRBuilderAttribute("block").CallWith(LiteralValueDoc(block->name_hint));
 
-      SeqStmtDoc body;
+  SeqStmtDoc body;
 
-      body.Extend(GetBlockVarsDeclarations(block_realize, p));
-      body.Add(p.ToDoc<StmtDoc>(block));
+  body.Extend(GetBlockVarsDeclarations(block_realize, p));
+  body.Add(p.ToDoc<StmtDoc>(block));
 
-      scope_doc->body = std::move(body);
+  scope_doc->body = std::move(body);
 
-      p.context_manager->ExitContext(std::move(context));
-      return scope_doc;
-    });
+  p.context_manager->ExitContext(std::move(context));
+  return scope_doc;
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BlockNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto block = Downcast<Block>(n);
-      // TODO: T.alloc_buffer and match_buffer and init
-      return p.ToDoc<StmtDoc>(block->body);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const Block& n, TVMScriptUnifiedPrinter& p) {
+  const auto block = Downcast<Block>(n);
+  // TODO: T.alloc_buffer and match_buffer and init
+  return p.ToDoc<StmtDoc>(block->body);
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<ForNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto for_ref = Downcast<For>(n);
-      ForDoc doc;
-      auto context = p.context_manager->EnterContext<PrinterLoopContext>();
-      p.context_manager->AddVar(for_ref->loop_var);
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const For& n, TVMScriptUnifiedPrinter& p) {
+  const auto for_ref = Downcast<For>(n);
+  ForDoc doc;
+  auto context = p.context_manager->EnterContext<PrinterLoopContext>();
+  p.context_manager->AddVar(for_ref->loop_var);
 
-      doc->target = p.ToDoc<IdentifierDoc>(for_ref->loop_var);
-      auto for_kind = ExprDoc::TIRBuilderAttribute(ForKind2String(for_ref->kind));
-      if (is_zero(for_ref->min)) {
-        doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->extent));
-      } else {
-        doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->min),
-                                      p.ToExprDoc(for_ref->min + for_ref->extent));
-      }
-      // TODO: annotation, thread binding
-      doc->body = p.ToDoc<StmtDoc>(for_ref->body);
+  doc->target = p.ToDoc<IdentifierDoc>(for_ref->loop_var);
+  auto for_kind = ExprDoc::TIRBuilderAttribute(ForKind2String(for_ref->kind));
+  if (is_zero(for_ref->min)) {
+    doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->extent));
+  } else {
+    doc->iter =
+        for_kind.CallWith(p.ToExprDoc(for_ref->min), p.ToExprDoc(for_ref->min + for_ref->extent));
+  }
+  // TODO: annotation, thread binding
+  doc->body = p.ToDoc<StmtDoc>(for_ref->body);
 
-      p.context_manager->ExitContext(std::move(context));
-      return doc;
-    });
+  p.context_manager->ExitContext(std::move(context));
+  return doc;
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<PrimTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto type = Downcast<PrimType>(n);
-      return TypeDoc::TIRPrimitive(runtime::DLDataType2String(type->dtype));
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const PrimType& type, TVMScriptUnifiedPrinter& p) {
+  return TypeDoc::TIRPrimitive(runtime::DLDataType2String(type->dtype));
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<TupleTypeNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto type = Downcast<TupleType>(n);
-      if (type->fields.empty()) {
-        return TypeDoc::NoneType();
-      } else {
-        std::vector<TypeDoc> fields;
-        for (auto& field : type->fields) {
-          fields.push_back(p.ToDoc<TypeDoc>(field));
-        }
-        return TypeDoc::TIRPrimitive("Tuple").CallWith(fields);
-      }
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const TupleType& type, TVMScriptUnifiedPrinter& p) {
+  if (type->fields.empty()) {
+    return TypeDoc::NoneType();
+  } else {
+    std::vector<TypeDoc> fields;
+    for (auto& field : type->fields) {
+      fields.push_back(p.ToDoc<TypeDoc>(field));
+    }
+    return TypeDoc::TIRPrimitive("Tuple").CallWith(fields);
+  }
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const Buffer buffer = Downcast<Buffer>(n);
-      p.OnBufferUsed(buffer);
-      return IdentifierDoc(buffer->name);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const Buffer& n, TVMScriptUnifiedPrinter& p) {
+  const Buffer buffer = Downcast<Buffer>(n);
+  p.OnBufferUsed(buffer);
+  return IdentifierDoc(buffer->name);
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferStoreNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const BufferStore op = Downcast<BufferStore>(n);
-      AssignDoc doc;
-      auto buf_var = p.ToExprDoc(op->buffer);
-      doc->target = buf_var.IndexWith(p.ToExprDocArray(op->indices));
-      doc->value = p.ToExprDoc(op->value);
-      return doc;
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const BufferStore& n, TVMScriptUnifiedPrinter& p) {
+  const BufferStore op = Downcast<BufferStore>(n);
+  AssignDoc doc;
+  auto buf_var = p.ToExprDoc(op->buffer);
+  doc->target = buf_var.IndexWith(p.ToExprDocArray(op->indices));
+  doc->value = p.ToExprDoc(op->value);
+  return doc;
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<VarNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const Var var = Downcast<Var>(n);
-      p.OnVarUsed(var);
-      return IdentifierDoc(var->name_hint);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const Var& n, TVMScriptUnifiedPrinter& p) {
+  const Var var = Downcast<Var>(n);
+  p.OnVarUsed(var);
+  return IdentifierDoc(var->name_hint);
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<BufferLoadNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto buffer_load = Downcast<BufferLoad>(n);
-      return p.ToExprDoc(buffer_load->buffer).IndexWith(p.ToExprDocArray(buffer_load->indices));
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const BufferLoad& n, TVMScriptUnifiedPrinter& p) {
+  const auto buffer_load = Downcast<BufferLoad>(n);
+  return p.ToExprDoc(buffer_load->buffer).IndexWith(p.ToExprDocArray(buffer_load->indices));
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<FloatImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto node_ref = Downcast<FloatImm>(n);
-      return LiteralValueDoc(node_ref);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const FloatImm& n, TVMScriptUnifiedPrinter& p) {
+  const auto node_ref = Downcast<FloatImm>(n);
+  return LiteralValueDoc(node_ref);
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<IntImmNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto node_ref = Downcast<IntImm>(n);
-      return LiteralValueDoc(node_ref);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const IntImm& n, TVMScriptUnifiedPrinter& p) {
+  const auto node_ref = Downcast<IntImm>(n);
+  return LiteralValueDoc(node_ref);
+});
 
-TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)
-    .set_dispatch<StringObj>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc {
-      const auto s = Downcast<String>(n);
-      return LiteralValueDoc(s);
-    });
+TVMSCRIPT_PRINTER_DOC_PRODUCER([](const String& n, TVMScriptUnifiedPrinter& p) {
+  const auto s = Downcast<String>(n);
+  return LiteralValueDoc(s);
+});
 
-#define TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(OpNode, OpKind)                     \
-  TVM_STATIC_IR_FUNCTOR(TVMScriptUnifiedPrinter, vtable)                                \
-      .set_dispatch<OpNode>([](const ObjectRef& n, TVMScriptUnifiedPrinter& p) -> Doc { \
-        const auto* node = n.as<OpNode>();                                              \
-        OperationDoc doc;                                                               \
-        doc->kind = OperationDocNode::OperationKind::OpKind;                            \
-        doc->operands = {p.ToExprDoc(node->a), p.ToExprDoc(node->b)};                   \
-        return doc;                                                                     \
-      });
+#define TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(OpRef)                                   \
+  TVMSCRIPT_PRINTER_DOC_PRODUCER(([](const OpRef& ref, TVMScriptUnifiedPrinter& p) { \
+    OperationDoc doc;                                                                        \
+    doc->kind = OperationDocNode::OperationKind::OpRef;                                      \
+    doc->operands = {p.ToExprDoc(ref->a), p.ToExprDoc(ref->b)};                              \
+    return doc;                                                                              \
+  }));
 
-TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(MulNode, Mul)
-TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(DivNode, Div)
-TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(FloorDivNode, FloorDiv)
-TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(AddNode, Add)
-TVM_DECLARE_TVMSCRIPT_UNIFIED_PRINTER_BINOP(SubNode, Sub)
+TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(Mul)
+TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(Div)
+TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(FloorDiv)
+TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(Add)
+TVMSCRIPT_PRINTER_REGISTER_BINOP_DOC_PRODUCER(Sub)
 
 String AsTVMScriptUnified(const ObjectRef& node, const String& tir_prefix) {
   auto printer = TVMScriptUnifiedPrinter(std::make_unique<PythonDocPrinter>(tir_prefix));
