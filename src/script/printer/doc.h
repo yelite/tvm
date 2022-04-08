@@ -17,25 +17,18 @@
  * under the License.
  */
 /*!
- * \brief Printer class to print TVMScript from Relax and TIR nodes.
+ * \brief Doc Intermediate Representation for Printing
  */
-#ifndef TVM_TVMSCRIPT_UNIFIED_PRINTER_H_
-#define TVM_TVMSCRIPT_UNIFIED_PRINTER_H_
+#ifndef TVM_SCRIPT_PRINTER_DOC_H_
+#define TVM_SCRIPT_PRINTER_DOC_H_
 
-#include <tvm/node/node.h>
-#include <tvm/runtime/container/map.h>
-
-#include <initializer_list>
-#include <utility>
-
-#include "tvm/relay/expr.h"
-#include "tvm/runtime/container/array.h"
-#include "tvm/runtime/object.h"
+#include <tvm/tir/expr.h>
 
 namespace tvm {
 namespace script {
+namespace printer {
 
-// Code Doc
+// Doc
 
 class DocNode : public Object {
  public:
@@ -44,13 +37,13 @@ class DocNode : public Object {
   DocNode() = default;
   virtual ~DocNode() = default;
 
-  static constexpr const char* _type_key = "script.Docs.Doc";
+  static constexpr const char* _type_key = "script.Doc";
   TVM_DECLARE_BASE_OBJECT_INFO(DocNode, Object);
 };
 
 class Doc : public ObjectRef {
  public:
-  Doc() : Doc(make_object<DocNode>()){};
+  Doc() : Doc(make_object<DocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(Doc, ObjectRef, DocNode);
 };
 
@@ -58,7 +51,7 @@ class Doc : public ObjectRef {
 
 class ExprDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.Docs.BaseExprDoc";
+  static constexpr const char* _type_key = "script.BaseExprDoc";
   TVM_DECLARE_BASE_OBJECT_INFO(ExprDocNode, DocNode);
 };
 
@@ -78,7 +71,7 @@ class ExprDoc : public Doc {
   template <typename... IndexType>
   ExprDoc IndexWith(IndexType&&... args);
 
-  ExprDoc() : ExprDoc(make_object<ExprDocNode>()){};
+  ExprDoc() : ExprDoc(make_object<ExprDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ExprDoc, Doc, ExprDocNode);
 };
 
@@ -86,18 +79,18 @@ class ExprDoc : public Doc {
 
 class LiteralValueDocNode : public ExprDocNode {
  public:
-  ObjectRef value;  // Can only be FloatImm/IntImm/StringImm/String
+  /*!
+   * \brief Can only be FloatImm/IntImm/StringImm/String
+   */
+  ObjectRef value;
 
-  static constexpr const char* _type_key = "script.Docs.LiteralValueDoc";
+  static constexpr const char* _type_key = "script.LiteralValueDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(LiteralValueDocNode, ExprDocNode);
-
- private:
-  ObjectRef value_;
 };
 
 class LiteralValueDoc : public ExprDoc {
  public:
-  LiteralValueDoc() : LiteralValueDoc(make_object<LiteralValueDocNode>()){};
+  LiteralValueDoc() : LiteralValueDoc(make_object<LiteralValueDocNode>()) {}
   LiteralValueDoc(IntImm val) : LiteralValueDoc(static_cast<ObjectRef>(val)) {}
   LiteralValueDoc(FloatImm val) : LiteralValueDoc(static_cast<ObjectRef>(val)) {}
   LiteralValueDoc(tir::StringImm val) : LiteralValueDoc(static_cast<ObjectRef>(val)) {}
@@ -117,13 +110,17 @@ class LiteralValueDoc : public ExprDoc {
 
 class ConstDocNode : public ExprDocNode {
  public:
-  enum class ConstKind { TIRBuilder, RelaxBuilder, None };
+  enum class ConstKind : int32_t {
+    None = 0,
+    TIRBuilder = 1,
+    RelaxBuilder = 2,
+  };
 
   ConstKind kind;
 
   ConstDocNode(ConstKind kind) : kind(kind) {}
 
-  static constexpr const char* _type_key = "script.Docs.ConstDoc";
+  static constexpr const char* _type_key = "script.ConstDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ConstDocNode, ExprDocNode);
 };
 
@@ -138,7 +135,7 @@ class IdentifierDocNode : public ExprDocNode {
  public:
   String name;
 
-  static constexpr const char* _type_key = "script.Docs.IdentidierDoc";
+  static constexpr const char* _type_key = "script.IdentidierDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(IdentifierDocNode, ExprDocNode);
 };
 
@@ -150,7 +147,7 @@ class IdentifierDoc : public ExprDoc {
     data_ = std::move(node);
   };
 
-  IdentifierDoc() : IdentifierDoc(make_object<IdentifierDocNode>()){};
+  IdentifierDoc() : IdentifierDoc(make_object<IdentifierDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(IdentifierDoc, ExprDoc, IdentifierDocNode);
 };
 
@@ -161,13 +158,13 @@ class AttrAccessDocNode : public ExprDocNode {
   ExprDoc value;
   IdentifierDoc attr;
 
-  static constexpr const char* _type_key = "script.Docs.AttrAccessDoc";
+  static constexpr const char* _type_key = "script.AttrAccessDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(AttrAccessDocNode, ExprDocNode);
 };
 
 class AttrAccessDoc : public ExprDoc {
  public:
-  AttrAccessDoc() : AttrAccessDoc(make_object<AttrAccessDocNode>()){};
+  AttrAccessDoc() : AttrAccessDoc(make_object<AttrAccessDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(AttrAccessDoc, ExprDoc, AttrAccessDocNode);
 };
 
@@ -178,13 +175,13 @@ class IndexDocNode : public ExprDocNode {
   ExprDoc value;
   Array<ExprDoc> indices;
 
-  static constexpr const char* _type_key = "script.Docs.IndexDoc";
+  static constexpr const char* _type_key = "script.IndexDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(IndexDocNode, ExprDocNode);
 };
 
 class IndexDoc : public ExprDoc {
  public:
-  IndexDoc() : IndexDoc(make_object<IndexDocNode>()){};
+  IndexDoc() : IndexDoc(make_object<IndexDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(IndexDoc, ExprDoc, IndexDocNode);
 };
 
@@ -197,13 +194,13 @@ class OperationDocNode : public ExprDocNode {
   OperationKind kind;
   Array<ExprDoc> operands;
 
-  static constexpr const char* _type_key = "script.Docs.OperationDoc";
+  static constexpr const char* _type_key = "script.OperationDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(OperationDocNode, ExprDocNode);
 };
 
 class OperationDoc : public ExprDoc {
  public:
-  OperationDoc() : OperationDoc(make_object<OperationDocNode>()){};
+  OperationDoc() : OperationDoc(make_object<OperationDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(OperationDoc, ExprDoc, OperationDocNode);
 };
 
@@ -216,13 +213,13 @@ class CallDocNode : public ExprDocNode {
   Array<String> keyword_arg_names;
   Array<ExprDoc> keyword_arg_values;
 
-  static constexpr const char* _type_key = "script.Docs.CallDoc";
+  static constexpr const char* _type_key = "script.CallDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(CallDocNode, ExprDocNode);
 };
 
 class CallDoc : public ExprDoc {
  public:
-  CallDoc() : CallDoc(make_object<CallDocNode>()){};
+  CallDoc() : CallDoc(make_object<CallDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(CallDoc, ExprDoc, CallDocNode);
 };
 
@@ -232,7 +229,7 @@ class TupleDocNode : public ExprDocNode {
  public:
   Array<ExprDoc> elements;
 
-  static constexpr const char* _type_key = "script.Docs.TupleDoc";
+  static constexpr const char* _type_key = "script.TupleDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(TupleDocNode, ExprDocNode);
 };
 
@@ -244,7 +241,7 @@ class TupleDoc : public ExprDoc {
     data_ = std::move(node);
   }
 
-  TupleDoc() : TupleDoc(make_object<TupleDocNode>()){};
+  TupleDoc() : TupleDoc(make_object<TupleDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TupleDoc, ExprDoc, TupleDocNode);
 };
 
@@ -261,7 +258,8 @@ inline ExprDoc ExprDoc::None() {
 template <typename... AttrType>
 inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) {
   auto result = TIRBuilder();
-  for (auto& name : std::initializer_list<std::common_type_t<AttrType...>>{std::forward<AttrType>(names)...}) {
+  for (auto& name :
+       std::initializer_list<std::common_type_t<AttrType...>>{std::forward<AttrType>(names)...}) {
     result = result.AccessAttr(name);
   }
   return result;
@@ -294,13 +292,13 @@ inline ExprDoc ExprDoc::IndexWith(IndexType&&... args) {
 
 class TypeDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.Docs.TypeDoc";
+  static constexpr const char* _type_key = "script.TypeDoc";
   TVM_DECLARE_BASE_OBJECT_INFO(TypeDocNode, DocNode);
 };
 
 class TypeDoc : public Doc {
  public:
-  TypeDoc() : TypeDoc(make_object<TypeDocNode>()){};
+  TypeDoc() : TypeDoc(make_object<TypeDocNode>()) {}
 
   template <typename... AttrType>
   static TypeDoc TIRPrimitive(AttrType&&... names);
@@ -318,7 +316,7 @@ class ExprTypeDocNode : public TypeDocNode {
  public:
   ExprDoc expr;
 
-  static constexpr const char* _type_key = "script.Docs.ExprTypeDoc";
+  static constexpr const char* _type_key = "script.ExprTypeDoc";
   TVM_DECLARE_BASE_OBJECT_INFO(ExprTypeDocNode, TypeDocNode);
 };
 
@@ -345,13 +343,13 @@ class TypeCallDocNode : public TypeDocNode {
   TypeDoc base;
   Array<TypeDoc> args;
 
-  static constexpr const char* _type_key = "script.Docs.TypeCall";
+  static constexpr const char* _type_key = "script.TypeCall";
   TVM_DECLARE_BASE_OBJECT_INFO(TypeCallDocNode, TypeDocNode);
 };
 
 class TypeCallDoc : public TypeDoc {
  public:
-  TypeCallDoc() : TypeCallDoc(make_object<TypeCallDocNode>()){};
+  TypeCallDoc() : TypeCallDoc(make_object<TypeCallDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TypeCallDoc, TypeDoc, TypeCallDocNode);
 };
 
@@ -377,13 +375,13 @@ inline TypeDoc TypeDoc::CallWith(ArgType&&... args) {
 
 class StmtDocNode : public DocNode {
  public:
-  static constexpr const char* _type_key = "script.Docs.StmtDoc";
+  static constexpr const char* _type_key = "script.StmtDoc";
   TVM_DECLARE_BASE_OBJECT_INFO(StmtDocNode, DocNode);
 };
 
 class StmtDoc : public Doc {
  public:
-  StmtDoc() : StmtDoc(make_object<StmtDocNode>()){};
+  StmtDoc() : StmtDoc(make_object<StmtDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(StmtDoc, Doc, StmtDocNode);
 };
 
@@ -393,13 +391,13 @@ class SeqStmtDocNode : public StmtDocNode {
  public:
   Array<StmtDoc> seq;
 
-  static constexpr const char* _type_key = "script.Docs.SeqStmtDoc";
+  static constexpr const char* _type_key = "script.SeqStmtDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(SeqStmtDocNode, StmtDocNode);
 };
 
 class SeqStmtDoc : public StmtDoc {
  public:
-  SeqStmtDoc() : SeqStmtDoc(make_object<SeqStmtDocNode>()){};
+  SeqStmtDoc() : SeqStmtDoc(make_object<SeqStmtDocNode>()) {}
   SeqStmtDoc(Array<StmtDoc> stmts) {  // NOLINT(*)
     auto node = make_object<SeqStmtDocNode>();
     node->seq = std::move(stmts);
@@ -413,7 +411,7 @@ class SeqStmtDoc : public StmtDoc {
   }
 
   SeqStmtDoc& Extend(SeqStmtDoc stmts) {
-    for (auto& s : stmts->seq) {
+    for (const StmtDoc& s : stmts->seq) {
       this->operator->()->seq.push_back(s);
     }
     return *this;
@@ -436,13 +434,13 @@ class AssignDocNode : public StmtDocNode {
   Optional<ExprDoc> value;  // If null, this doc represents declaration, e.g. `A: T.Buffer[(1,2)]`
   Optional<TypeDoc> type;
 
-  static constexpr const char* _type_key = "script.Docs.AssignDoc";
+  static constexpr const char* _type_key = "script.AssignDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(AssignDocNode, StmtDocNode);
 };
 
 class AssignDoc : public StmtDoc {
  public:
-  AssignDoc() : AssignDoc(make_object<AssignDocNode>()){};
+  AssignDoc() : AssignDoc(make_object<AssignDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(AssignDoc, StmtDoc, AssignDocNode);
 };
 
@@ -454,13 +452,13 @@ class ForDocNode : public StmtDocNode {
   ExprDoc iter;
   StmtDoc body;
 
-  static constexpr const char* _type_key = "script.Docs.ForDoc";
+  static constexpr const char* _type_key = "script.ForDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ForDocNode, StmtDocNode);
 };
 
 class ForDoc : public StmtDoc {
  public:
-  ForDoc() : ForDoc(make_object<ForDocNode>()){};
+  ForDoc() : ForDoc(make_object<ForDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ForDoc, StmtDoc, ForDocNode);
 };
 
@@ -471,13 +469,13 @@ class ScopeDocNode : public StmtDocNode {
   ExprDoc scope;
   StmtDoc body;
 
-  static constexpr const char* _type_key = "script.Docs.ScopeDoc";
+  static constexpr const char* _type_key = "script.ScopeDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ScopeDocNode, StmtDocNode);
 };
 
 class ScopeDoc : public StmtDoc {
  public:
-  ScopeDoc() : ScopeDoc(make_object<ScopeDocNode>()){};
+  ScopeDoc() : ScopeDoc(make_object<ScopeDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
 };
 
@@ -486,13 +484,13 @@ class ExprStmtDocNode : public StmtDocNode {
  public:
   ExprDoc expr;
 
-  static constexpr const char* _type_key = "script.Docs.ExprStmtDoc";
+  static constexpr const char* _type_key = "script.ExprStmtDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ExprStmtDocNode, StmtDocNode);
 };
 
 class ExprStmtDoc : public StmtDoc {
  public:
-  ExprStmtDoc() : ExprStmtDoc(make_object<ExprStmtDocNode>()){};
+  ExprStmtDoc() : ExprStmtDoc(make_object<ExprStmtDocNode>()) {}
   ExprStmtDoc(ExprDoc expr) {
     auto node = make_object<ExprStmtDocNode>();
     node->expr = std::move(expr);
@@ -508,13 +506,13 @@ class FunctionArgDocNode : public DocNode {
   IdentifierDoc name;
   TypeDoc type;
 
-  static constexpr const char* _type_key = "script.Docs.FunctionArgDoc";
+  static constexpr const char* _type_key = "script.FunctionArgDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(FunctionArgDocNode, DocNode);
 };
 
 class FunctionArgDoc : public Doc {
  public:
-  FunctionArgDoc() : FunctionArgDoc(make_object<FunctionArgDocNode>()){};
+  FunctionArgDoc() : FunctionArgDoc(make_object<FunctionArgDocNode>()) {}
   FunctionArgDoc(IdentifierDoc name, TypeDoc type) {
     auto node = make_object<FunctionArgDocNode>();
     node->name = std::move(name);
@@ -531,126 +529,22 @@ class FunctionDocNode : public DocNode {
  public:
   IdentifierDoc name;
   Array<FunctionArgDoc> args;
+  Array<ExprDoc> decorators;
   TypeDoc return_type;
   StmtDoc body;
 
-  static constexpr const char* _type_key = "script.Docs.FunctionDoc";
+  static constexpr const char* _type_key = "script.FunctionDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, DocNode);
 };
 
 class FunctionDoc : public Doc {
  public:
-  FunctionDoc() : FunctionDoc(make_object<FunctionDocNode>()){};
+  FunctionDoc() : FunctionDoc(make_object<FunctionDocNode>()) {}
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(FunctionDoc, Doc, FunctionDocNode);
 };
 
-// Printer Context
-
-class PrinterBaseContextNode : public Object {
- public:
-  static constexpr const char* _type_key = "script.PrinterBaseContext";
-  TVM_DECLARE_BASE_OBJECT_INFO(PrinterBaseContextNode, Object);
-};
-
-class PrinterBaseContext : public ObjectRef {
- public:
-  PrinterBaseContext() { data_ = make_object<PrinterBaseContextNode>(); }
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterBaseContext, runtime::ObjectRef,
-                                                    PrinterBaseContextNode);
-};
-
-class PrinterFunctionContextNode : public PrinterBaseContextNode {
- public:
-  static constexpr const char* _type_key = "script.PrinterFunctionContext";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterFunctionContextNode, Object);
-};
-
-class PrinterFunctionContext : public PrinterBaseContext {
- public:
-  PrinterFunctionContext() { data_ = make_object<PrinterFunctionContextNode>(); }
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterFunctionContext, PrinterBaseContext,
-                                                    PrinterFunctionContextNode);
-};
-
-class PrinterLoopContextNode : public PrinterBaseContextNode {
- public:
-  static constexpr const char* _type_key = "script.PrinterLoopContext";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterLoopContextNode, Object);
-};
-
-class PrinterLoopContext : public PrinterBaseContext {
- public:
-  PrinterLoopContext() { data_ = make_object<PrinterLoopContextNode>(); }
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterLoopContext, PrinterBaseContext,
-                                                    PrinterLoopContextNode);
-};
-
-class PrinterBlockContextNode : public PrinterBaseContextNode {
- public:
-  static constexpr const char* _type_key = "script.PrinterBlockContext";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterBlockContextNode, Object);
-};
-
-class PrinterBlockContext : public PrinterBaseContext {
- public:
-  PrinterBlockContext() { data_ = make_object<PrinterBlockContextNode>(); }
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterBlockContext, PrinterBaseContext,
-                                                    PrinterBlockContextNode);
-};
-
-// TODO: Needs more thought on this
-class PrinterContextManagerNode : public Object {
- public:
-  Array<PrinterBaseContext> contexts;
-  std::vector<Map<String, ObjectRef>> symbol_tables;
-
-  template <typename ContextType>
-  ContextType EnterContext() {
-    ContextType context;
-    contexts.push_back(context);
-    PushNewSymbolTable();
-    return context;
-  }
-
-  void ExitContext(PrinterBaseContext&& context) {
-    // ICHECK_EQ(context, contexts.back())
-    contexts.pop_back();
-    symbol_tables.pop_back();
-  }
-
-  void AddVar(const tir::Buffer& buffer) { symbol_tables.back().Set(buffer->name, buffer); }
-
-  void AddVar(const tir::Var& var) { symbol_tables.back().Set(var->name_hint, var); }
-
-  Optional<ObjectRef> GetVar(const String& name) {
-    if (symbol_tables.empty()) {
-      return Optional<ObjectRef>();
-    }
-    auto current_table = symbol_tables.back();
-    return current_table.Get(name);
-  }
-
-  static constexpr const char* _type_key = "script.PrinterContextManager";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterContextManagerNode, Object);
-
- private:
-  void PushNewSymbolTable() {
-    if (symbol_tables.empty()) {
-      symbol_tables.emplace_back();
-    } else {
-      symbol_tables.emplace_back(symbol_tables.back());
-    }
-  }
-};
-
-class PrinterContextManager : public ObjectRef {
- public:
-  PrinterContextManager() { data_ = make_object<PrinterContextManagerNode>(); }
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterContextManager, runtime::ObjectRef,
-                                                    PrinterContextManagerNode);
-};
-
+}  // namespace printer
 }  // namespace script
 }  // namespace tvm
 
-#endif  // TVM_TVMSCRIPT_UNIFIED_PRINTER_H_
+#endif
