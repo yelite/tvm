@@ -30,7 +30,7 @@ DocProducerRegistry& TVMScriptUnifiedPrinter::registry() {
   return inst;
 }
 
-String TVMScriptUnifiedPrinter::PrintNode(const ObjectRef& ref) {
+String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
   auto element = ToDoc<Doc>(ref);
   if (prelude_.empty()) {
     return doc_printer_->Print({element});
@@ -65,7 +65,7 @@ bool TVMScriptUnifiedPrinter::HasFreeVar(const String& name, const ObjectRef& va
 
 String AsTVMScriptUnified(const ObjectRef& node, const String& tir_prefix) {
   auto printer = TVMScriptUnifiedPrinter(std::make_unique<PythonDocPrinter>(tir_prefix));
-  return printer.PrintNode(node);
+  return printer.Print(node);
 }
 
 TVM_REGISTER_GLOBAL("experiment.AsTVMScript").set_body_typed(AsTVMScriptUnified);

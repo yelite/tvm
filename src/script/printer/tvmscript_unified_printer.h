@@ -184,21 +184,18 @@ class TVMScriptUnifiedPrinter {
 
   static DocProducerRegistry& registry();
 
-  String PrintNode(const ObjectRef& ref);
+  String Print(const ObjectRef& ref);
   Doc PrintExtraVarDeclaration();
 
   template <typename T, typename = std::enable_if_t<std::is_base_of<Doc, T>::value>>
   T ToDoc(const ObjectRef& ref);
 
-  template <typename DocType, typename NodeType,
-            typename = std::enable_if_t<std::is_base_of<Doc, DocType>::value>,
-            typename = std::enable_if_t<std::is_base_of<ObjectRef, NodeType>::value>>
+  template <typename DocType, typename NodeType>
   Array<DocType> ToDocArray(const Array<NodeType>& refs);
 
   ExprDoc ToExprDoc(const ObjectRef& ref) { return ToDoc<ExprDoc>(ref); }
 
-  template <typename NodeType,
-            typename = std::enable_if_t<std::is_base_of<ObjectRef, NodeType>::value>>
+  template <typename NodeType>
   Array<ExprDoc> ToExprDocArray(const Array<NodeType>& refs) {
     return ToDocArray<ExprDoc>(refs);
   }
@@ -245,7 +242,7 @@ T TVMScriptUnifiedPrinter::ToDoc(const ObjectRef& ref) {
   return Downcast<T>(element);
 }
 
-template <typename DocType, typename NodeType, typename, typename>
+template <typename DocType, typename NodeType >
 Array<DocType> TVMScriptUnifiedPrinter::ToDocArray(const Array<NodeType>& refs) {
   Array<DocType> result;
   for (auto& n : refs) {
