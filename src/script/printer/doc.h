@@ -57,12 +57,6 @@ class ExprDocNode : public DocNode {
 
 class ExprDoc : public Doc {
  public:
-  static ExprDoc TIRBuilder();
-  static ExprDoc None();
-
-  template <typename... AttrType>
-  static ExprDoc TIRBuilderAttribute(AttrType&&... name);
-
   ExprDoc AccessAttr(String attr);
 
   template <typename... ArgType>
@@ -126,6 +120,9 @@ class ConstDocNode : public ExprDocNode {
 
 class ConstDoc : public ExprDoc {
  public:
+  static ConstDoc TIRBuilder();
+  static ConstDoc None();
+
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ConstDoc, ExprDoc, ConstDocNode);
 };
 
@@ -247,22 +244,12 @@ class TupleDoc : public ExprDoc {
 
 // Helper functions for ExprDoc
 
-inline ExprDoc ExprDoc::TIRBuilder() {
+inline ConstDoc ConstDoc::TIRBuilder() {
   return ConstDoc(make_object<ConstDocNode>(ConstDocNode::ConstKind::TIRBuilder));
 }
 
-inline ExprDoc ExprDoc::None() {
+inline ConstDoc ConstDoc::None() {
   return ConstDoc(make_object<ConstDocNode>(ConstDocNode::ConstKind::None));
-}
-
-template <typename... AttrType>
-inline ExprDoc ExprDoc::TIRBuilderAttribute(AttrType&&... names) {
-  auto result = TIRBuilder();
-  for (auto& name :
-       std::initializer_list<std::common_type_t<AttrType...>>{std::forward<AttrType>(names)...}) {
-    result = result.AccessAttr(name);
-  }
-  return result;
 }
 
 inline ExprDoc ExprDoc::AccessAttr(String attr) {
@@ -300,8 +287,6 @@ class TypeDoc : public Doc {
  public:
   TypeDoc() : TypeDoc(make_object<TypeDocNode>()) {}
 
-  template <typename... AttrType>
-  static TypeDoc TIRPrimitive(AttrType&&... names);
   static TypeDoc NoneType();
 
   template <typename... ArgType>
@@ -328,7 +313,9 @@ class ExprTypeDoc : public TypeDoc {
     data_ = std::move(node);
   }
 
-  static ExprTypeDoc TIRPrimitive(String type_name);
+  static ExprTypeDoc TIRPrimitive(String type_name) {
+    return ExprTypeDoc(ConstDoc::TIRBuilder().AccessAttr(type_name));
+  };
 
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(ExprTypeDoc, TypeDoc, ExprTypeDocNode);
 };
@@ -355,13 +342,7 @@ class TypeCallDoc : public TypeDoc {
 
 // Helper methods for type
 
-template <typename... AttrType>
-inline TypeDoc TypeDoc::TIRPrimitive(AttrType&&... names) {
-  auto expr = ExprDoc::TIRBuilderAttribute(names...);
-  return ExprTypeDoc(std::move(expr));
-}
-
-inline TypeDoc TypeDoc::NoneType() { return ExprTypeDoc(ExprDoc::None()); }
+inline TypeDoc TypeDoc::NoneType() { return ExprTypeDoc(ConstDoc::None()); }
 
 template <typename... ArgType>
 inline TypeDoc TypeDoc::CallWith(ArgType&&... args) {

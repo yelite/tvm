@@ -41,7 +41,7 @@ String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
 
 TypeDoc TVMScriptUnifiedPrinter::GetBufferTypeDoc(const tir::Buffer& buf) {
   TypeCallDoc type_doc;
-  type_doc->base = TypeDoc::TIRPrimitive("Buffer");
+  type_doc->base = ExprTypeDoc::TIRPrimitive("Buffer");
 
   if (buf->shape.size() > 1) {
     TupleDoc shape_doc;

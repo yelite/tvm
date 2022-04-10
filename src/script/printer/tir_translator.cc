@@ -20,6 +20,7 @@
 #include <tvm/tir/function.h>
 #include <tvm/tir/op.h>
 
+#include "doc.h"
 #include "tvmscript_unified_printer.h"
 
 namespace tvm {
@@ -115,7 +116,9 @@ SeqStmtDoc GetBlockVarsDeclarations(const BlockRealize block_realize, TVMScriptU
     } else {
       dom_arg = TupleDoc{p.ToExprDoc(dom->min), p.ToExprDoc(dom->min + dom->extent)};
     }
-    assign_stmt->value = ExprDoc::TIRBuilderAttribute("axis", std::move(axis_type))
+    assign_stmt->value = ConstDoc::TIRBuilder()
+                             .AccessAttr("axis")
+                             .AccessAttr(std::move(axis_type))
                              .CallWith(std::move(dom_arg), p.ToExprDoc(value));
 
     doc.Add(assign_stmt);
@@ -131,7 +134,7 @@ TVMSCRIPT_PRINTER_DOC_PRODUCER([](const BlockRealize& block_realize, TVMScriptUn
   // TODO: optional info
   // print block name and block vars
   scope_doc->scope =
-      ExprDoc::TIRBuilderAttribute("block").CallWith(LiteralValueDoc(block->name_hint));
+      ConstDoc::TIRBuilder().AccessAttr("block").CallWith(LiteralValueDoc(block->name_hint));
 
   SeqStmtDoc body;
 
@@ -155,7 +158,7 @@ TVMSCRIPT_PRINTER_DOC_PRODUCER([](const For& for_ref, TVMScriptUnifiedPrinter& p
   p.context_manager->AddVar(for_ref->loop_var);
 
   doc->target = p.ToDoc<IdentifierDoc>(for_ref->loop_var);
-  auto for_kind = ExprDoc::TIRBuilderAttribute(ForKind2String(for_ref->kind));
+  auto for_kind = ConstDoc::TIRBuilder().AccessAttr(ForKind2String(for_ref->kind));
   if (is_zero(for_ref->min)) {
     doc->iter = for_kind.CallWith(p.ToExprDoc(for_ref->extent));
   } else {
@@ -170,7 +173,7 @@ TVMSCRIPT_PRINTER_DOC_PRODUCER([](const For& for_ref, TVMScriptUnifiedPrinter& p
 });
 
 TVMSCRIPT_PRINTER_DOC_PRODUCER([](const PrimType& type, TVMScriptUnifiedPrinter& p) {
-  return TypeDoc::TIRPrimitive(runtime::DLDataType2String(type->dtype));
+  return ExprTypeDoc::TIRPrimitive(runtime::DLDataType2String(type->dtype));
 });
 
 TVMSCRIPT_PRINTER_DOC_PRODUCER([](const TupleType& type, TVMScriptUnifiedPrinter& p) {
@@ -181,7 +184,7 @@ TVMSCRIPT_PRINTER_DOC_PRODUCER([](const TupleType& type, TVMScriptUnifiedPrinter
     for (const Type& field : type->fields) {
       fields.push_back(p.ToDoc<TypeDoc>(field));
     }
-    return TypeDoc::TIRPrimitive("Tuple").CallWith(fields);
+    return ExprTypeDoc::TIRPrimitive("Tuple").CallWith(fields);
   }
 });
 
