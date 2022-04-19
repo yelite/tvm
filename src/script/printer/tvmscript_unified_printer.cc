@@ -20,47 +20,54 @@
 #include "tvmscript_unified_printer.h"
 
 #include <tvm/tir/op.h>
+#include "context.h"
+#include "doc.h"
+#include "registry.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
 
-DocProducerRegistry& TVMScriptUnifiedPrinter::registry() {
-  static DocProducerRegistry inst;
-  return inst;
+
+ObjectGenericFunction<Doc, TVMScriptUnifiedPrinter*> DocTranslators() {
+    static ObjectGenericFunction<Doc, TVMScriptUnifiedPrinter*> f;
+    return f;
+}
+
+ObjectGenericFunction<TypeDoc, TVMScriptUnifiedPrinter*> VariableTypeDocTranslators() {
+    static ObjectGenericFunction<TypeDoc, TVMScriptUnifiedPrinter*> f;
+    return f;
 }
 
 String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
   auto element = ToDoc<Doc>(ref);
-  if (prelude_.empty()) {
+  Array<StmtDoc> prelude = GetPrelude();
+  if (prelude.empty()) {
     return doc_printer_->Print({element});
   } else {
-    return doc_printer_->Print({SeqStmtDoc(prelude_), element});
+    return doc_printer_->Print({SeqStmtDoc(prelude), element});
   }
 }
 
-TypeDoc TVMScriptUnifiedPrinter::GetBufferTypeDoc(const tir::Buffer& buf) {
-  TypeCallDoc type_doc;
-  type_doc->base = ExprTypeDoc::TIRPrimitive("Buffer");
+Array<StmtDoc> TVMScriptUnifiedPrinter::GetPrelude() {
+  Array<StmtDoc> result;
+  Map<String, ObjectRef> free_variables = context.GetFreeVariables();
 
-  if (buf->shape.size() > 1) {
-    TupleDoc shape_doc;
-    shape_doc->elements = ToExprDocArray(buf->shape);
-    type_doc->args.push_back(ExprTypeDoc(shape_doc));
-  } else {
-    type_doc->args.push_back(ExprTypeDoc(ToExprDoc(buf->shape[0])));
+  for (auto it = free_variables.begin(); it != free_variables.end(); ++it) {
+      ObjectRef variable = (*it).second;
+      AssignDoc declaration;
+      declaration->target = IdentifierDoc(GetVariableName(variable));
+      declaration->type = ToVariableTypeDoc(variable);
+      result.push_back(declaration);
   }
-  type_doc->args.push_back(ExprTypeDoc(LiteralValueDoc(runtime::DLDataType2String(buf->dtype))));
+
+  return result;
+}
+
+TypeDoc TVMScriptUnifiedPrinter::ToVariableTypeDoc(const ObjectRef& ref) {
+  TypeDoc type_doc = VariableTypeDocTranslators()(ref, this);
+  type_doc->origin_ir_node = ref;
   return type_doc;
-}
-
-TypeDoc TVMScriptUnifiedPrinter::GetVarTypeDoc(const tir::Var& var) {
-  return ToDoc<TypeDoc>(GetType(var));
-}
-
-bool TVMScriptUnifiedPrinter::HasFreeVar(const String& name, const ObjectRef& var) {
-  Optional<ObjectRef> free_var = free_vars_.Get(name);
-  return free_var && free_var.value() == var;
 }
 
 String AsTVMScriptUnified(const ObjectRef& node, const String& tir_prefix) {
