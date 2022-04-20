@@ -858,7 +858,7 @@ class TVMScriptRuntimeClass : public BaseTvmClass {
   }
 
  private:
-  // std::map<std::string, TVMScriptRuntimeModulePack> tvm_modules_;
+  std::map<std::string, TVMScriptRuntimeModulePack> tvm_modules_;
 };
 
 static auto __tvm_dsoop_tvmscirpt_runtime_registry =

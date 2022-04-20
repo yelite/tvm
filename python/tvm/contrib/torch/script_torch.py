@@ -11,9 +11,9 @@ class TVMScriptModule(torch.nn.Module):
         # TODO : switch to C++ for milestone 1.2
         # self.engine = torch.classes.tvm_dsoop.TVMScriptModule(module, input_shape, output_shape, self.device, target)
         self.runtime_mod = tvm.build(module)
-        params = [module.buffer_map[x] for x in module.params]
-        self.inputs_shape = params[:-1]
-        self.output_shape = params[-1]
+        # params = [module.buffer_map[x] for x in module.params]
+        # self.inputs_shape = params[:-1]
+        # self.output_shape = params[-1]
 
     def forward(self, torch_inputs : List[torch.Tensor]):
         # TODO : switch to C++ for milestone 1.2

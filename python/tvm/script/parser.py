@@ -431,10 +431,12 @@ class TVMScriptParser(Transformer):
         """
 
         def check_decorator(decorators: List[ast.Expr]) -> bool:
-            """Check the decorator is `T.prim_func"""
-            if len(decorators) != 1:
+            """Check the decorator is `T.prim_func or as_torch"""
+            if len(decorators) > 2:
                 return False
-            d: ast.Expr = decorators[0]
+            if len(decorators) == 2 and decorators[0].id.name != "as_torch":
+                return False
+            d: ast.Expr = decorators[-1]
             return (
                 isinstance(d, ast.Attr)
                 and isinstance(d.object, ast.Var)

@@ -37,6 +37,22 @@ def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
                 C[vi, vj] = T.float32(0)
             C[vi, vj] = C[vi, vj] + A[vi, vk] * B[vj, vk]
 
+@as_torch
+@tvm.script.ir_module
+class MyModule:
+    @T.prim_func
+    def main(a: T.handle, b: T.handle):
+        # We exchange data between function by handles, which are similar to pointer.
+        T.func_attr({"global_symbol": "main", "tir.noalias": True})
+        # Create buffer from handles.
+        A = T.match_buffer(a, (8,), dtype="float32")
+        B = T.match_buffer(b, (8,), dtype="float32")
+        for i in range(8):
+            # A block is an abstraction for computation.
+            with T.block("B"):
+                # Define a spatial block iterator and bind it to value i.
+                vi = T.axis.spatial(8, i)
+                B[vi] = A[vi] + 1.0
 
 def test_tvmscript_torch_matmul():
     s1 = np.ones((128,128)).astype("float32")
@@ -54,6 +70,21 @@ def test_tvmscript_torch_matmul():
     tvm_module = as_torch(matmul)
 
     res = tvm_module.forward([q1, q2, q3])
+
+    tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
+
+def test_tvmscript_torch_decorator():
+    s1 = np.arange(8).astype("float32")
+    s2 = np.zeros((8,)).astype("float32")
+
+    q1 = torch.from_numpy(s1)
+    q2 = torch.from_numpy(s2)
+
+    numpy_result = s1 + 1
+
+    tvm_module = MyModule
+
+    res = tvm_module.forward([q1, q2])
 
     tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
