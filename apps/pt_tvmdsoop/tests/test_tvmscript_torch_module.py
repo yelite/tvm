@@ -90,3 +90,4 @@ def test_tvmscript_torch_decorator():
 
 if __name__ == "__main__":
     test_tvmscript_torch_matmul()
+    test_tvmscript_torch_decorator()
