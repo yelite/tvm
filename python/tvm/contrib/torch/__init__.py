@@ -49,3 +49,8 @@ from . import pytorch_tvm
 
 PyTorchTVMModule = pytorch_tvm.PyTorchTVMModule
 compile = pytorch_tvm.compile
+
+from . import script_torch
+
+as_torch = script_torch.as_torch
+TVMScriptModule = script_torch.TVMScriptModule
