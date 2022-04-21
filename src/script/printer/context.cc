@@ -22,12 +22,10 @@
 
 #include "context.h"
 
+#include <tvm/runtime/container/base.h>
+#include <tvm/runtime/logging.h>
 #include <tvm/tir/buffer.h>
 #include <tvm/tir/var.h>
-
-#include "registry.h"
-#include "tvm/runtime/container/base.h"
-#include "tvm/runtime/logging.h"
 
 namespace tvm {
 namespace script {
@@ -38,43 +36,54 @@ ObjectGenericFunction<String>& VariableNamers() {
   return f;
 }
 
-String GetVariableName(const ObjectRef& ref) { return VariableNamers()(ref); }
-
-void PrinterContext::AddVariable(ObjectRef variable) {
-  String name = GetVariableName(variable);
-
-  PrinterFrame top_frame = get()->frames.back();
-
-  ICHECK(!top_frame->variables.Get(name));
-  top_frame->variables.Set(name, variable);
+String GetVariableName(const ObjectRef& ref) {
+  static ObjectGenericFunction<String>& f = VariableNamers();
+  return f(ref);
 }
 
-Optional<ObjectRef> PrinterContext::GetVariable(String name) {
+bool TranslatorFrameNode::AddVariable(String name, ObjectRef variable) {
+  ICHECK(variables.Get(name)) << "Duplicate definition of variable " << name;
+  variables.Set(GetVariableName(variable), variable);
+  return true;
+}
+
+Optional<ObjectRef> TranslatorFrameNode::GetVariable(String name) const {
+  return variables.Get(name);
+}
+
+TranslatorFrame TranslatorContext::GlobalFrame() const { return get()->frames.back(); }
+
+void TranslatorContext::AddVariable(ObjectRef variable) {
+  Array<TranslatorFrame>& frames = get()->frames;
+  String variable_name = GetVariableName(variable);
+
+  for (auto it = frames.begin(); it != frames.end(); ++it) {
+    if ((*it)->AddVariable(variable_name, variable)) {
+      return;
+    }
+  }
+}
+
+Optional<ObjectRef> TranslatorContext::GetVariable(String name) const {
   auto self = get();
   for (auto it = self->frames.rbegin(); it != self->frames.rend(); ++it) {
-    const PrinterFrame& frame = *it;
-    if (frame->variables.find(name) != frame->variables.end()) {
-      return frame->variables.Get(name);
+    const TranslatorFrame& frame = *it;
+    if (Optional<ObjectRef> v = frame->GetVariable(name)) {
+      return v;
     }
   }
   return NullOpt;
 }
 
-void PrinterContext::OnVariableUsed(ObjectRef variable) {
+void TranslatorContext::OnVariableUsed(ObjectRef variable) {
   String variable_name = GetVariableName(variable);
   Optional<ObjectRef> variable_from_frame = GetVariable(variable_name);
   if (variable_from_frame) {
     ICHECK_EQ(variable_from_frame.value(), variable);
   } else {
-    GlobalFrame()->variables.Set(variable_name, variable);
+    GlobalFrame()->AddVariable(variable_name, variable);
   }
 }
-
-Map<String, ObjectRef> PrinterContext::GetFreeVariables() {
-    return GlobalFrame()->variables;
-}
-
-PrinterFrame PrinterContext::GlobalFrame() { return get()->frames.front(); }
 
 }  // namespace printer
 }  // namespace script

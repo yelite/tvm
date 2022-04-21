@@ -25,11 +25,12 @@
 #include <tvm/runtime/container/array.h>
 #include <tvm/runtime/container/map.h>
 #include <tvm/runtime/container/string.h>
+#include <tvm/runtime/logging.h>
 #include <tvm/runtime/memory.h>
 #include <tvm/runtime/object.h>
+#include <tvm/runtime/packed_func.h>
 
-#include "registry.h"
-#include "tvm/runtime/logging.h"
+#include "generic_function.h"
 
 namespace tvm {
 namespace script {
@@ -47,65 +48,117 @@ String GetVariableName(const ObjectRef& ref);
 #define TVMSCRIPT_PRINTER_VARIABLE_NAMER(VariableNamer) \
   TVM_STATIC_REGISTER_GENERIC_FUNCTION(::tvm::script::printer::VariableNamers, VariableNamer)
 
-class PrinterFrameNode : public Object {
+class TranslatorFrameNode : public Object {
  public:
   Map<String, ObjectRef> variables;
 
-  PrinterFrameNode() = default;
-  virtual ~PrinterFrameNode() = default;
+  TranslatorFrameNode() = default;
+  virtual ~TranslatorFrameNode() = default;
 
-  static constexpr const char* _type_key = "script.printer.Frame";
-  TVM_DECLARE_BASE_OBJECT_INFO(PrinterFrameNode, Object);
+  virtual bool AddVariable(String name, ObjectRef variable);
+  virtual Optional<ObjectRef> GetVariable(String name) const;
+
+  static constexpr const char* _type_key = "script.printer.TranslatorFrame";
+  TVM_DECLARE_BASE_OBJECT_INFO(TranslatorFrameNode, Object);
 };
 
-class PrinterFrame : public ObjectRef {
+class TranslatorFrame : public ObjectRef {
  public:
-  PrinterFrame() : PrinterFrame(make_object<PrinterFrameNode>()) {}
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterFrame, ObjectRef, PrinterFrameNode);
+  TranslatorFrame() : TranslatorFrame(make_object<TranslatorFrameNode>()) {}
+
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TranslatorFrame, ObjectRef,
+                                                    TranslatorFrameNode);
 };
 
-class PrinterContextNode : public Object {
+class TranslatorContextNode : public Object {
  public:
-  Array<PrinterFrame> frames;
+  Array<TranslatorFrame> frames;
 
-  PrinterContextNode() = default;
-  virtual ~PrinterContextNode() = default;
+  TranslatorContextNode() = default;
+  virtual ~TranslatorContextNode() = default;
 
-  static constexpr const char* _type_key = "script.printer.Context";
-  TVM_DECLARE_FINAL_OBJECT_INFO(PrinterContextNode, Object);
+  static constexpr const char* _type_key = "script.printer.TranslatorContext";
+  TVM_DECLARE_BASE_OBJECT_INFO(TranslatorContextNode, Object);
 };
 
-class PrinterContext : public ObjectRef {
+template <typename FrameType>
+class FrameGuard {
  public:
-  PrinterContext() {
-    auto node = make_object<PrinterContextNode>();
-    node->frames.push_back(PrinterFrame());
+  FrameType frame;
+  TranslatorContextNode* context;
+
+  FrameGuard(FrameType frame, TranslatorContextNode* context)
+      : frame(std::move(frame)), context(context) {}
+  ~FrameGuard() {
+    ICHECK_EQ(frame, context->frames.back()) << "Translator frame mismatch when popping";
+    context->frames.pop_back();
+  };
+};
+
+class TranslatorContext : public ObjectRef {
+ public:
+  TranslatorContext() {
+    auto node = make_object<TranslatorContextNode>();
+    // Add global frame to capture free variables
+    node->frames.push_back(TranslatorFrame());
     data_ = std::move(node);
   }
 
-  template <typename FrameType = PrinterFrame>  // TODO: Remove after having more subclass of frame
-  FrameType AddFrame() {
-    FrameType frame;
-    get()->frames.push_back(frame);
-    return frame;
-  }
-  void PopFrame() {
-    Array<PrinterFrame>& frames = get()->frames;
-    ICHECK_GT(frames.size(), 1);
-    frames.pop_back();
-  }
+  template <typename FrameType = TranslatorFrame>
+  FrameGuard<FrameType> WithFrame();
+
+  template <typename FrameType>
+  bool HasFrame() const;
+
+  template <typename FrameType>
+  Optional<FrameType> GetFrame() const;
+
+  template <typename FrameType>
+  FrameType GetFrameOrDefault() const;
+
+  TranslatorFrame GlobalFrame() const;
 
   void AddVariable(ObjectRef variable);
-  Optional<ObjectRef> GetVariable(String name);
-  bool HasVariable(String name) { return GetVariable(std::move(name)) != nullptr; }
+  Optional<ObjectRef> GetVariable(String name) const;
+  bool HasVariable(String name) const { return GetVariable(std::move(name)) != nullptr; }
 
   void OnVariableUsed(ObjectRef variable);
-  Map<String, ObjectRef> GetFreeVariables();
+  Map<String, ObjectRef> GetFreeVariables() const;
 
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrinterContext, ObjectRef, PrinterContextNode);
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TranslatorContext, ObjectRef,
+                                                    TranslatorContextNode);
+};
 
- private:
-  PrinterFrame GlobalFrame();
+template <typename FrameType>
+FrameGuard<FrameType> TranslatorContext::WithFrame() {
+  FrameType frame;
+  get()->frames.push_back(frame);
+  return FrameGuard<FrameType>(frame, this);
+}
+
+template <typename FrameType>
+Optional<FrameType> TranslatorContext::GetFrame() const {
+  for (auto it = get()->frames.begin(); it != get()->frames.end(); ++it) {
+    if ((*it)->IsInstance<FrameType>()) {
+      return *it;
+    }
+  }
+  return NullOpt;
+}
+
+template <typename FrameType>
+bool TranslatorContext::HasFrame() const {
+  return GetFrame<FrameType>() != nullptr;
+}
+
+template <typename FrameType>
+FrameType TranslatorContext::GetFrameOrDefault() const {
+  Optional<FrameType> frame = GetFrame<FrameType>();
+  if (frame == nullptr) {
+    return FrameType();
+  } else {
+    return frame;
+  }
 };
 
 }  // namespace printer
