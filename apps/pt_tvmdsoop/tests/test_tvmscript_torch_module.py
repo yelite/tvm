@@ -22,8 +22,10 @@ import torch
 from tvm.contrib.torch import as_torch
 from tvm.script import tir as T
 import numpy as np
+import torch.nn
 import tvm.testing
 
+@as_torch
 @T.prim_func
 def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
     A = T.match_buffer(a, [128, 128])
@@ -54,6 +56,16 @@ class MyModule:
                 vi = T.axis.spatial(8, i)
                 B[vi] = A[vi] + 1.0
 
+
+class MinuesOnes(torch.nn.Module):
+    def __init__(self):
+        super(MinuesOnes, self).__init__()
+        self.mat = matmul
+
+    def forward(self, input):
+        ret = self.mat.forward(input) - 1
+        return ret
+
 def test_tvmscript_torch_matmul():
     s1 = np.ones((128,128)).astype("float32")
     s2 = np.ones((128,128)).astype("float32")
@@ -67,7 +79,7 @@ def test_tvmscript_torch_matmul():
 
     numpy_result = np.matmul(s1,s2)
 
-    tvm_module = as_torch(matmul)
+    tvm_module = matmul
 
     res = tvm_module.forward([q1, q2, q3])
 
@@ -88,6 +100,27 @@ def test_tvmscript_torch_decorator():
 
     tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
+def test_torch_with_tvmscirpt():
+    s1 = np.ones((128,128)).astype("float32")
+    s2 = np.ones((128,128)).astype("float32")
+    s3 = np.zeros((128,128)).astype("float32")
+    s1[0,0] = -10
+    s2[4,4] = -20
+
+    q1 = torch.from_numpy(s1)
+    q2 = torch.from_numpy(s2)
+    q3 = torch.from_numpy(s3)
+
+    numpy_result = np.matmul(s1,s2) - 1
+
+    tvm_module = MinuesOnes()
+
+    res = tvm_module.forward(input = [q1, q2, q3])
+
+    tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
+
+
 if __name__ == "__main__":
     test_tvmscript_torch_matmul()
     test_tvmscript_torch_decorator()
+    test_torch_with_tvmscirpt()

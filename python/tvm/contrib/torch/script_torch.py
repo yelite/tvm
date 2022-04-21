@@ -15,7 +15,7 @@ class TVMScriptModule(torch.nn.Module):
         # self.inputs_shape = params[:-1]
         # self.output_shape = params[-1]
 
-    def forward(self, torch_inputs : List[torch.Tensor]):
+    def forward(self, torch_inputs : List[torch.Tensor]) -> torch.Tensor :
         # TODO : switch to C++ for milestone 1.2
         # r"""Call tvm module to forward"""
         # return self.engine.forward(torch_input)
