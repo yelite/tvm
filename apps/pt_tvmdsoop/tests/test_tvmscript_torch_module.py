@@ -39,19 +39,6 @@ def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
                 C[vi, vj] = T.float32(0)
             C[vi, vj] = C[vi, vj] + A[vi, vk] * B[vj, vk]
 
-@T.prim_func
-def matmul_no_deco(a: T.handle, b: T.handle, c: T.handle) -> None:
-    A = T.match_buffer(a, [128, 128])
-    B = T.match_buffer(b, [128, 128])
-    C = T.match_buffer(c, [128, 128])
-
-    for i, j, k in T.grid(128, 128, 128):
-        with T.block("update"):
-            vi, vj, vk = T.axis.remap("SSR", [i, j, k])
-            with T.init():
-                C[vi, vj] = T.float32(0)
-            C[vi, vj] = C[vi, vj] + A[vi, vk] * B[vj, vk]
-
 @as_torch
 @tvm.script.ir_module
 class MyModule:
@@ -133,27 +120,7 @@ def test_torch_with_tvmscirpt():
     tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
 
-def test_tvmscript_torch_matmul_with_cxx():
-    s1 = np.ones((128,128)).astype("float32")
-    s2 = np.ones((128,128)).astype("float32")
-    s3 = np.zeros((128,128)).astype("float32")
-    s1[0,0] = 0
-    s2[4,4] = 0
-
-    q1 = torch.from_numpy(s1)
-    q2 = torch.from_numpy(s2)
-    q3 = torch.from_numpy(s3)
-
-    numpy_result = np.matmul(s1,s2)
-
-    tvm_module = matmul_no_deco
-
-    # res = tvm_module([q1, q2, q3])
-
-    # tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
-
 if __name__ == "__main__":
     test_tvmscript_torch_matmul()
     test_tvmscript_torch_decorator()
     test_torch_with_tvmscirpt()
-    test_tvmscript_torch_matmul_with_cxx()

@@ -23,7 +23,7 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         super().__init__()
         # we assume only 1 output for now
         self.engine = torch.classes.tvm_dsoop.TVMScriptModule(len(module.params) - 1, 1, "cpu")
-        self.engine.load_IR_module(module)
+        self.engine.LoadTvmModule(module)
         
 
     def forward(self, torch_inputs : List[torch.Tensor]) -> torch.Tensor :
