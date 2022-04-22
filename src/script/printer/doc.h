@@ -366,39 +366,30 @@ class StmtDoc : public Doc {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(StmtDoc, Doc, StmtDocNode);
 };
 
-// Seq Stmt Doc
+// Stmt Block Doc
 
-class SeqStmtDocNode : public StmtDocNode {
+class StmtBlockDocNode : public DocNode {
  public:
-  Array<StmtDoc> seq;
+  Array<StmtDoc> statements;
 
-  static constexpr const char* _type_key = "script.SeqStmtDoc";
-  TVM_DECLARE_FINAL_OBJECT_INFO(SeqStmtDocNode, StmtDocNode);
+  static constexpr const char* _type_key = "script.StmtBlockDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(StmtBlockDocNode, DocNode);
 };
 
-class SeqStmtDoc : public StmtDoc {
+class StmtBlockDoc : public Doc {
  public:
-  SeqStmtDoc() : SeqStmtDoc(make_object<SeqStmtDocNode>()) {}
-  SeqStmtDoc(Array<StmtDoc> stmts) {  // NOLINT(*)
-    auto node = make_object<SeqStmtDocNode>();
-    node->seq = std::move(stmts);
-    data_ = std::move(node);
+  StmtBlockDoc() : StmtBlockDoc(make_object<StmtBlockDocNode>()) {}
+  explicit StmtBlockDoc(StmtDoc stmt) : StmtBlockDoc() { get()->statements.push_back(stmt); }
+
+  StmtBlockDoc(Array<StmtDoc> statements) : StmtBlockDoc() {  // NOLINT(*)
+    get()->statements = std::move(statements);
   }
 
-  // TODO: Unpack StmtDoc if it's SeqStmtDoc
-  SeqStmtDoc& Add(const StmtDoc& stmt) {
-    get()->seq.push_back(stmt);
-    return *this;
+  static StmtBlockDoc Merge(const StmtBlockDoc& first, const StmtBlockDoc& second) {
+    return StmtBlockDoc(runtime::Concat(first->statements, second->statements));
   }
 
-  SeqStmtDoc& Extend(SeqStmtDoc stmts) {
-    for (const StmtDoc& s : stmts->seq) {
-      this->operator->()->seq.push_back(s);
-    }
-    return *this;
-  }
-
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(SeqStmtDoc, StmtDoc, SeqStmtDocNode);
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(StmtBlockDoc, Doc, StmtBlockDocNode);
 };
 
 // Assign Doc
@@ -431,7 +422,7 @@ class ForDocNode : public StmtDocNode {
  public:
   ExprDoc target;
   ExprDoc iter;
-  StmtDoc body;
+  StmtBlockDoc body;
 
   static constexpr const char* _type_key = "script.ForDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ForDocNode, StmtDocNode);
@@ -448,7 +439,7 @@ class ForDoc : public StmtDoc {
 class ScopeDocNode : public StmtDocNode {
  public:
   ExprDoc scope;
-  StmtDoc body;
+  StmtBlockDoc body;
 
   static constexpr const char* _type_key = "script.ScopeDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(ScopeDocNode, StmtDocNode);
@@ -512,7 +503,7 @@ class FunctionDocNode : public DocNode {
   Array<FunctionArgDoc> args;
   Array<ExprDoc> decorators;
   TypeDoc return_type;
-  StmtDoc body;
+  StmtBlockDoc body;
 
   static constexpr const char* _type_key = "script.FunctionDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, DocNode);

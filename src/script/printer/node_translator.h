@@ -71,6 +71,8 @@ class NodeTranslator : public ObjectRef {
   template <typename DocType, typename NodeType>
   Array<DocType> ToDocArray(const Array<NodeType>& refs);
 
+  StmtBlockDoc ToStmtBlockDoc(const ObjectRef& ref);
+
   ExprDoc ToExprDoc(const ObjectRef& ref) { return ToDoc<ExprDoc>(ref); }
 
   template <typename NodeType>
@@ -97,6 +99,12 @@ T NodeTranslator::ToDoc(const ObjectRef& ref) {
   Doc doc = f(ref, *this);
   doc->origin_ir_node = ref;
   EndTranslation();
+
+  if (std::is_same<T, StmtBlockDoc>::value) {
+    if (const auto* doc_node = doc.as<StmtDocNode>()) {
+      return Downcast<T>(StmtBlockDoc(GetRef<StmtDoc>(doc_node)));
+    }
+  }
 
   return Downcast<T>(doc);
 }

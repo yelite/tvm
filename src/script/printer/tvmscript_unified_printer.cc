@@ -34,7 +34,7 @@ String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
   if (prelude.empty()) {
     return doc_printer_->Print({element});
   } else {
-    return doc_printer_->Print({SeqStmtDoc(prelude), element});
+    return doc_printer_->Print({StmtBlockDoc(prelude), element});
   }
 }
 

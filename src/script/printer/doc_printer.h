@@ -42,7 +42,7 @@ class DocPrinter {
   virtual void PrintDoc(const OperationDoc& doc) = 0;
   virtual void PrintDoc(const CallDoc& doc) = 0;
   virtual void PrintDoc(const TupleDoc& doc) = 0;
-  virtual void PrintDoc(const SeqStmtDoc& doc) = 0;
+  virtual void PrintDoc(const StmtBlockDoc& doc) = 0;
   virtual void PrintDoc(const ScopeDoc& doc) = 0;
   virtual void PrintDoc(const ForDoc& doc) = 0;
   virtual void PrintDoc(const AssignDoc& doc) = 0;
@@ -78,7 +78,7 @@ class PythonDocPrinter : public DocPrinter {
   void PrintDoc(const CallDoc& doc) final;
   void PrintDoc(const TupleDoc& doc) final;
 
-  void PrintDoc(const SeqStmtDoc& doc) final;
+  void PrintDoc(const StmtBlockDoc& doc) final;
   void PrintDoc(const ScopeDoc& doc) final;
   void PrintDoc(const ForDoc& doc) final;
   void PrintDoc(const AssignDoc& doc) final;

@@ -55,8 +55,8 @@ void DocPrinter::PrintDoc(const Doc& doc) {
     PrintDoc(Downcast<CallDoc>(doc));
   } else if (doc->IsInstance<TupleDocNode>()) {
     PrintDoc(Downcast<TupleDoc>(doc));
-  } else if (doc->IsInstance<SeqStmtDocNode>()) {
-    PrintDoc(Downcast<SeqStmtDoc>(doc));
+  } else if (doc->IsInstance<StmtBlockDocNode>()) {
+    PrintDoc(Downcast<StmtBlockDoc>(doc));
   } else if (doc->IsInstance<ScopeDocNode>()) {
     PrintDoc(Downcast<ScopeDoc>(doc));
   } else if (doc->IsInstance<ForDocNode>()) {
@@ -155,8 +155,8 @@ void PythonDocPrinter::PrintDoc(const TupleDoc& doc) {
   }
 }
 
-void PythonDocPrinter::PrintDoc(const SeqStmtDoc& doc) {
-  for (const StmtDoc& stmt : doc->seq) {
+void PythonDocPrinter::PrintDoc(const StmtBlockDoc& doc) {
+  for (const StmtDoc& stmt : doc->statements) {
     PrintDoc(stmt);
   }
 }

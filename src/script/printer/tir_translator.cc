@@ -54,7 +54,7 @@ TVMSCRIPT_PRINTER_NODE_TRANSLATOR([](PrimFunc func, NodeTranslator t) {
   }
   func_doc->return_type = t.ToDoc<TypeDoc>(func->ret_type);
 
-  SeqStmtDoc body;
+  StmtBlockDoc body;
 
   ObjectRef body_to_print = func->body;
   if (func->body->IsInstance<BlockRealizeNode>() &&
@@ -65,17 +65,16 @@ TVMSCRIPT_PRINTER_NODE_TRANSLATOR([](PrimFunc func, NodeTranslator t) {
       body_to_print = GetRef<ObjectRef>(block);
     }
   }
-  body.Add(t.ToDoc<StmtDoc>(body_to_print));
 
-  func_doc->body = std::move(body);
+  func_doc->body = t.ToDoc<StmtBlockDoc>(body_to_print);
 
   return func_doc;
 });
 
-SeqStmtDoc GetBlockVarsDeclarations(BlockRealize block_realize, NodeTranslator t) {
-  SeqStmtDoc doc;
+Array<StmtDoc> GetBlockVarsDeclarations(BlockRealize block_realize, NodeTranslator t) {
   const Block& block = block_realize->block;
   ICHECK_EQ(block->iter_vars.size(), block_realize->iter_values.size());
+  Array<StmtDoc> result;
 
   // TODO: handle remap
 
@@ -115,9 +114,9 @@ SeqStmtDoc GetBlockVarsDeclarations(BlockRealize block_realize, NodeTranslator t
                              .AccessAttr(std::move(axis_type))
                              .CallWith(std::move(dom_arg), t.ToExprDoc(value));
 
-    doc.Add(assign_stmt);
+    result.push_back(assign_stmt);
   }
-  return doc;
+  return result;
 }
 
 TVMSCRIPT_PRINTER_NODE_TRANSLATOR([](BlockRealize block_realize, NodeTranslator t) {
@@ -130,12 +129,10 @@ TVMSCRIPT_PRINTER_NODE_TRANSLATOR([](BlockRealize block_realize, NodeTranslator 
   scope_doc->scope =
       ConstDoc::TIRBuilder().AccessAttr("block").CallWith(LiteralValueDoc(block->name_hint));
 
-  SeqStmtDoc body;
+  Array<StmtDoc> body = GetBlockVarsDeclarations(block_realize, t);
+  body.push_back(t.ToDoc<StmtDoc>(block));
 
-  body.Extend(GetBlockVarsDeclarations(block_realize, t));
-  body.Add(t.ToDoc<StmtDoc>(block));
-
-  scope_doc->body = std::move(body);
+  scope_doc->body = StmtBlockDoc(std::move(body));
 
   return scope_doc;
 });
@@ -160,7 +157,7 @@ TVMSCRIPT_PRINTER_NODE_TRANSLATOR([](For for_ref, NodeTranslator t) {
         for_kind.CallWith(t.ToExprDoc(for_ref->min), t.ToExprDoc(for_ref->min + for_ref->extent));
   }
   // TODO: annotation, thread binding
-  doc->body = t.ToDoc<StmtDoc>(for_ref->body);
+  doc->body = t.ToDoc<StmtBlockDoc>(for_ref->body);
 
   return doc;
 });
