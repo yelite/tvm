@@ -16,9 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-/*!
- * \brief Frame represents semantic information in IR during printing
- */
 
 #include "context.h"
 
@@ -42,7 +39,7 @@ String GetVariableName(const ObjectRef& ref) {
 }
 
 bool TranslatorFrameNode::AddVariable(String name, ObjectRef variable) {
-  ICHECK(variables.Get(name)) << "Duplicate definition of variable " << name;
+  ICHECK(variables.Get(name) == nullptr) << "Duplicate definition of variable " << name;
   variables.Set(GetVariableName(variable), variable);
   return true;
 }
@@ -57,7 +54,7 @@ void TranslatorContext::AddVariable(ObjectRef variable) {
   Array<TranslatorFrame>& frames = get()->frames;
   String variable_name = GetVariableName(variable);
 
-  for (auto it = frames.begin(); it != frames.end(); ++it) {
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
     if ((*it)->AddVariable(variable_name, variable)) {
       return;
     }
@@ -65,7 +62,7 @@ void TranslatorContext::AddVariable(ObjectRef variable) {
 }
 
 Optional<ObjectRef> TranslatorContext::GetVariable(String name) const {
-  auto self = get();
+  TranslatorContextNode* self = get();
   for (auto it = self->frames.rbegin(); it != self->frames.rend(); ++it) {
     const TranslatorFrame& frame = *it;
     if (Optional<ObjectRef> v = frame->GetVariable(name)) {
@@ -77,8 +74,7 @@ Optional<ObjectRef> TranslatorContext::GetVariable(String name) const {
 
 void TranslatorContext::OnVariableUsed(ObjectRef variable) {
   String variable_name = GetVariableName(variable);
-  Optional<ObjectRef> variable_from_frame = GetVariable(variable_name);
-  if (variable_from_frame) {
+  if (Optional<ObjectRef> variable_from_frame = GetVariable(variable_name)) {
     ICHECK_EQ(variable_from_frame.value(), variable);
   } else {
     GlobalFrame()->AddVariable(variable_name, variable);

@@ -20,27 +20,16 @@
 #include "tvmscript_unified_printer.h"
 
 #include <tvm/tir/op.h>
+
 #include "context.h"
 #include "doc.h"
-#include "registry.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
 
-
-ObjectGenericFunction<Doc, TVMScriptUnifiedPrinter*> DocTranslators() {
-    static ObjectGenericFunction<Doc, TVMScriptUnifiedPrinter*> f;
-    return f;
-}
-
-ObjectGenericFunction<TypeDoc, TVMScriptUnifiedPrinter*> VariableTypeDocTranslators() {
-    static ObjectGenericFunction<TypeDoc, TVMScriptUnifiedPrinter*> f;
-    return f;
-}
-
 String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
-  auto element = ToDoc<Doc>(ref);
+  auto element = node_translator_.ToDoc<Doc>(ref);
   Array<StmtDoc> prelude = GetPrelude();
   if (prelude.empty()) {
     return doc_printer_->Print({element});
@@ -51,23 +40,17 @@ String TVMScriptUnifiedPrinter::Print(const ObjectRef& ref) {
 
 Array<StmtDoc> TVMScriptUnifiedPrinter::GetPrelude() {
   Array<StmtDoc> result;
-  Map<String, ObjectRef> free_variables = context.GetFreeVariables();
+  Map<String, ObjectRef> free_variables = node_translator_->context.GlobalFrame()->variables;
 
   for (auto it = free_variables.begin(); it != free_variables.end(); ++it) {
-      ObjectRef variable = (*it).second;
-      AssignDoc declaration;
-      declaration->target = IdentifierDoc(GetVariableName(variable));
-      declaration->type = ToVariableTypeDoc(variable);
-      result.push_back(declaration);
+    ObjectRef variable = (*it).second;
+    AssignDoc declaration;
+    declaration->target = IdentifierDoc(GetVariableName(variable));
+    declaration->type = node_translator_.ToVariableTypeDoc(variable);
+    result.push_back(declaration);
   }
 
   return result;
-}
-
-TypeDoc TVMScriptUnifiedPrinter::ToVariableTypeDoc(const ObjectRef& ref) {
-  TypeDoc type_doc = VariableTypeDocTranslators()(ref, this);
-  type_doc->origin_ir_node = ref;
-  return type_doc;
 }
 
 String AsTVMScriptUnified(const ObjectRef& node, const String& tir_prefix) {

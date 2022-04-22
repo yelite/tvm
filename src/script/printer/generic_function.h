@@ -89,10 +89,10 @@ class ObjectGenericFunction {
     return *this;
   }
 
-  R operator()(const ObjectRef& ref, Args&&... args) const {
+  R operator()(const ObjectRef& ref, Args... args) const {
     ICHECK(CanDispatch(ref)) << "ObjectGenericFunction calls un-registered function on type "
                              << ref->GetTypeKey();
-    return registry_[ref->type_index()](ref, std::forward<Args>(args)...);
+    return registry_[ref->type_index()](ref, std::move(args)...);
   }
 };
 

@@ -17,7 +17,7 @@
  * under the License.
  */
 /*!
- * \brief Frame represents semantic information in IR during printing
+ * \brief Context and Frame represent semantic information in IR during printing
  */
 #ifndef TVM_SCRIPT_PRINTER_FRAME_H_
 #define TVM_SCRIPT_PRINTER_FRAME_H_
@@ -87,12 +87,27 @@ class FrameGuard {
   FrameType frame;
   TranslatorContextNode* context;
 
-  FrameGuard(FrameType frame, TranslatorContextNode* context)
-      : frame(std::move(frame)), context(context) {}
+  FrameGuard() : frame(TranslatorFrame()), context(nullptr) {}
+  FrameGuard(FrameType frame, TranslatorContextNode* context) : context(context) {
+    context->frames.push_back(frame);
+    this->frame = std::move(frame);
+  }
+
   ~FrameGuard() {
+    if (context == nullptr) {
+      return;
+    }
     ICHECK_EQ(frame, context->frames.back()) << "Translator frame mismatch when popping";
     context->frames.pop_back();
   };
+
+  FrameGuard(FrameGuard<FrameType>&& other) noexcept
+      : frame(std::move(other.frame)), context(other.context) {
+    other.context = nullptr;
+  }
+
+  FrameGuard(const FrameGuard<FrameType>& other) = delete;
+  FrameGuard<FrameType>& operator=(const FrameGuard<FrameType>& other) = delete;
 };
 
 class TranslatorContext : public ObjectRef {
@@ -123,7 +138,6 @@ class TranslatorContext : public ObjectRef {
   bool HasVariable(String name) const { return GetVariable(std::move(name)) != nullptr; }
 
   void OnVariableUsed(ObjectRef variable);
-  Map<String, ObjectRef> GetFreeVariables() const;
 
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TranslatorContext, ObjectRef,
                                                     TranslatorContextNode);
@@ -131,14 +145,12 @@ class TranslatorContext : public ObjectRef {
 
 template <typename FrameType>
 FrameGuard<FrameType> TranslatorContext::WithFrame() {
-  FrameType frame;
-  get()->frames.push_back(frame);
-  return FrameGuard<FrameType>(frame, this);
+  return FrameGuard<FrameType>(FrameType(), get());
 }
 
 template <typename FrameType>
 Optional<FrameType> TranslatorContext::GetFrame() const {
-  for (auto it = get()->frames.begin(); it != get()->frames.end(); ++it) {
+  for (auto it = get()->frames.rbegin(); it != get()->frames.rend(); ++it) {
     if ((*it)->IsInstance<FrameType>()) {
       return *it;
     }
