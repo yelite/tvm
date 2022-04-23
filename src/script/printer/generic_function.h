@@ -83,8 +83,7 @@ class ObjectGenericFunction {
         << "Handler for " << ObjectType::_type_key << " is already set";
 
     registry_[tindex] = [handler = std::move(func)](const ObjectRef& ref, Args&&... args) {
-      R result = handler(Downcast<ObjectRefType>(ref), std::forward<Args>(args)...);
-      return result;
+      return handler(Downcast<ObjectRefType>(ref), std::forward<Args>(args)...);
     };
     return *this;
   }
