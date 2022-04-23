@@ -18,7 +18,9 @@
  */
 
 #include "doc_printer.h"
+
 #include "doc.h"
+#include "tvm/runtime/logging.h"
 
 namespace tvm {
 namespace script {
@@ -39,38 +41,38 @@ String DocPrinter::Print(std::initializer_list<Doc> docs) {
 }
 
 void DocPrinter::PrintDoc(const Doc& doc) {
-  if (doc->IsInstance<LiteralValueDocNode>()) {
-    PrintDoc(Downcast<LiteralValueDoc>(doc));
-  } else if (doc->IsInstance<ConstDocNode>()) {
-    PrintDoc(Downcast<ConstDoc>(doc));
-  } else if (doc->IsInstance<IdentifierDocNode>()) {
-    PrintDoc(Downcast<IdentifierDoc>(doc));
-  } else if (doc->IsInstance<AttrAccessDocNode>()) {
-    PrintDoc(Downcast<AttrAccessDoc>(doc));
-  } else if (doc->IsInstance<IndexDocNode>()) {
-    PrintDoc(Downcast<IndexDoc>(doc));
-  } else if (doc->IsInstance<OperationDocNode>()) {
-    PrintDoc(Downcast<OperationDoc>(doc));
-  } else if (doc->IsInstance<CallDocNode>()) {
-    PrintDoc(Downcast<CallDoc>(doc));
-  } else if (doc->IsInstance<TupleDocNode>()) {
-    PrintDoc(Downcast<TupleDoc>(doc));
-  } else if (doc->IsInstance<StmtBlockDocNode>()) {
-    PrintDoc(Downcast<StmtBlockDoc>(doc));
-  } else if (doc->IsInstance<ScopeDocNode>()) {
-    PrintDoc(Downcast<ScopeDoc>(doc));
-  } else if (doc->IsInstance<ForDocNode>()) {
-    PrintDoc(Downcast<ForDoc>(doc));
-  } else if (doc->IsInstance<AssignDocNode>()) {
-    PrintDoc(Downcast<AssignDoc>(doc));
-  } else if (doc->IsInstance<ExprTypeDocNode>()) {
-    PrintDoc(Downcast<ExprTypeDoc>(doc));
-  } else if (doc->IsInstance<TypeCallDocNode>()) {
-    PrintDoc(Downcast<TypeCallDoc>(doc));
-  } else if (doc->IsInstance<FunctionDocNode>()) {
-    PrintDoc(Downcast<FunctionDoc>(doc));
-  } else if (doc->IsInstance<FunctionArgDocNode>()) {
-    PrintDoc(Downcast<FunctionArgDoc>(doc));
+  if (const auto* doc_node = doc.as<LiteralValueDocNode>()) {
+    PrintDoc(GetRef<LiteralValueDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<ConstDocNode>()) {
+    PrintDoc(GetRef<ConstDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<IdentifierDocNode>()) {
+    PrintDoc(GetRef<IdentifierDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<AttrAccessDocNode>()) {
+    PrintDoc(GetRef<AttrAccessDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<IndexDocNode>()) {
+    PrintDoc(GetRef<IndexDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<OperationDocNode>()) {
+    PrintDoc(GetRef<OperationDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<CallDocNode>()) {
+    PrintDoc(GetRef<CallDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<TupleDocNode>()) {
+    PrintDoc(GetRef<TupleDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<StmtBlockDocNode>()) {
+    PrintDoc(GetRef<StmtBlockDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<ScopeDocNode>()) {
+    PrintDoc(GetRef<ScopeDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<ForDocNode>()) {
+    PrintDoc(GetRef<ForDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<AssignDocNode>()) {
+    PrintDoc(GetRef<AssignDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<ExprTypeDocNode>()) {
+    PrintDoc(GetRef<ExprTypeDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<TypeCallDocNode>()) {
+    PrintDoc(GetRef<TypeCallDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<FunctionDocNode>()) {
+    PrintDoc(GetRef<FunctionDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<FunctionArgDocNode>()) {
+    PrintDoc(GetRef<FunctionArgDoc>(doc_node));
   } else {
     LOG(FATAL) << "Do not know how to print " << doc->GetTypeKey();
     throw;
@@ -81,10 +83,12 @@ void PythonDocPrinter::PrintDoc(const LiteralValueDoc& doc) {
   ObjectRef& value = doc->value;
   if (value->IsInstance<FloatImmNode>() || value->IsInstance<IntImmNode>()) {
     PrintNumberNode(Downcast<PrimExpr>(doc->value));
-  } else if (value->IsInstance<StringObj>()) {
-    PrintStringLiteral(Downcast<String>(value));
+  } else if (const auto* string_obj = value.as<StringObj>()) {
+    PrintStringLiteral(GetRef<String>(string_obj));
   } else if (const auto* node = doc.as<tir::StringImmNode>()) {
     PrintStringLiteral(node->value);
+  } else {
+    ICHECK(false) << "Unsupported literal value type " << value->GetTypeKey();
   }
 }
 
@@ -226,11 +230,11 @@ void PythonDocPrinter::PrintNumberNode(const PrimExpr& expr) {
   const DataType& dtype = expr->dtype;
   std::ostringstream number_value;
 
-  if (expr->IsInstance<IntImmNode>()) {
-    number_value << Downcast<IntImm>(expr)->value;
-  } else if (expr->IsInstance<FloatImmNode>()) {
+  if (const auto* int_node = expr.as<IntImmNode>()) {
+    number_value << int_node->value;
+  } else if (const auto* float_node = expr.as<FloatImmNode>()) {
     number_value.precision(17);
-    number_value << Downcast<FloatImm>(expr)->value;
+    number_value << float_node->value;
   } else {
     LOG(FATAL) << "Do not know how to process " << expr->GetTypeKey() << " as literal number";
   }
