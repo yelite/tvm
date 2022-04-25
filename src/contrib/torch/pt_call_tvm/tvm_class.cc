@@ -25,9 +25,6 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/vm/vm.h>
-#include <tvm/ir/module.h>
-#include <tvm/target/target.h>
-#include <tvm/driver/driver_api.h>
 
 #include <map>
 #include <string>
@@ -641,7 +638,6 @@ class TvmVMRuntimeClass : public BaseTvmClass {
 using SerializeTuple =
     std::tuple<int64_t, int64_t, std::string, c10::Dict<std::string, std::string>>;
 
-
 /***** registries *****/
 static auto __tvm_dsoop_graph_runtime_registry =
     torch::jit::class_<TvmGraphRuntimeClass>("tvm_dsoop", "TvmGraphModule")
@@ -682,8 +678,6 @@ static auto __tvm_dsoop_vm_runtime_registry =
               ptr->DeserializeTvmModules(std::get<3>(tuple));
               return ptr;
             });
-
-
 
 static auto __tvm_shape_repr_fn_registry =
     torch::RegisterOperators("tvm_dsoop::tvm_shape_repr", &BaseTvmClass::TvmShapeRepr);
