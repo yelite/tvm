@@ -641,50 +641,6 @@ class TvmVMRuntimeClass : public BaseTvmClass {
 using SerializeTuple =
     std::tuple<int64_t, int64_t, std::string, c10::Dict<std::string, std::string>>;
 
-class TVMScriptRuntimeClass : public BaseTvmClass {
- public:
-  TVMScriptRuntimeClass(const int64_t num_inputs, const int64_t num_outputs,
-                       const std::string& device) 
-  : BaseTvmClass(num_inputs, num_outputs, device) {
-    std::cout<<"TVM scirpte init"<<std::endl;
-      }
-
-
-  void LoadModule() {
-    // TODO: ir_module must load from file, at least for now
-    IRModule ir_module;
-    Target llvm = Target("llvm");
-    Map<Target, IRModule> container = {{llvm, ir_module}};
-    module =  build(container, llvm);
-  }
-
-  /*!
-   * \brief Module forward.
-   *
-   * \param inputs Inputs with type List[Tensor].
-   *
-   * \return outputs with type List[Tensor].
-   */
-  c10::List<at::Tensor> forward(const c10::List<at::Tensor>& inputs) override {
-    // TODO : need to call DLpack
-    std::cout<<"forward"<<std::endl;
-  }
-
-  /* 
-  * dummy functions: these 3 functions must implement but won't be used
-  */
-  c10::Dict<std::string, std::string> SerializeTvmModules() const override {
-    c10::Dict<std::string, std::string> shape_path_map;
-    return shape_path_map;
-  }
-  void DeserializeTvmModules(const c10::Dict<std::string, std::string>& shape_path_map) override {}
-  void to(const std::string& device) override {}
-
- private:
-  runtime::Module module;
-
-};
-
 
 /***** registries *****/
 static auto __tvm_dsoop_graph_runtime_registry =
@@ -727,12 +683,6 @@ static auto __tvm_dsoop_vm_runtime_registry =
               return ptr;
             });
 
-
-static auto __tvm_dsoop_tvmscirpt_runtime_registry =
-    torch::jit::class_<TVMScriptRuntimeClass>("tvm_dsoop", "TVMScriptModule")
-    .def(torch::init<const int64_t, const int64_t, const std::string&>())
-    .def("LoadModule", &TVMScriptRuntimeClass::LoadModule)
-    .def("forward", &TVMScriptRuntimeClass::forward);
 
 
 static auto __tvm_shape_repr_fn_registry =
