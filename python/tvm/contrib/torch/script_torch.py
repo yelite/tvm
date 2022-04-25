@@ -19,11 +19,17 @@ class TVMScriptModule(torch.nn.Module):
         return torch_output
 
 class TVMScriptModuleWithCxx(torch.nn.Module):
-    def __init__(self, module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc]):
+    def __init__(self, ir_module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc]):
         super().__init__()
-        # we assume only 1 output for now
-        self.engine = torch.classes.tvm_dsoop.TVMScriptModule(len(module.params) - 1, 1, "cpu")
-        self.engine.LoadTvmModule(module)
+        libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
+        torch.classes.load_library(libpt_path)
+
+        runtime_module = tvm.build(ir_module)
+        
+        func = tvm.get_global_func("tvmtorch.save_runtime_mod")
+        func(runtime_module)
+
+        self.engine = torch.classes.tvm_torch.TVMScriptRuntime()
         
 
     def forward(self, torch_inputs : List[torch.Tensor]) -> torch.Tensor :
@@ -32,7 +38,7 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         # torch_output = tensor_inputs[-1]
         # torch_output = torch.utils.dlpack.from_dlpack(torch_output.to_dlpack())
         # return torch_output
-        pass
+        print("forward runs")
 
 
 def as_torch( func: tvm.ir.module.IRModule):

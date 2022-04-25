@@ -54,3 +54,4 @@ from . import script_torch
 
 as_torch = script_torch.as_torch
 TVMScriptModule = script_torch.TVMScriptModule
+TVMScriptModuleWithCxx = script_torch.TVMScriptModuleWithCxx

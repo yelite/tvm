@@ -19,7 +19,8 @@
 #include <dlpack/dlpack.h>
 #include <torch/custom_class.h>
 #include <torch/script.h>
-
+#include <tvm/runtime/registry.h>
+#include <tvm/runtime/module.h>
 
 #include <map>
 #include <string>
@@ -27,29 +28,46 @@
 
 #include "../utils.h"
 
+namespace tvm {
+namespace contrib {
+
+// NOTE : this struct should be defined before TVMScriptRuntimeClass
+struct ThreadLocalStore {
+  tvm::runtime::Module mod;
+  static ThreadLocalStore* ThreadLocal() {
+    thread_local ThreadLocalStore tls;
+    return &tls;
+  }
+};
+
 class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
  public:
-  TVMScriptRuntimeClass(const int64_t num_inputs, const int64_t num_outputs,
-                       const std::string& device) 
-  : num_inputs_(num_inputs), num_outputs_(num_outputs), device_(device) {
-    std::cout<<"TVM scirpte init"<<std::endl;
-      }
+  TVMScriptRuntimeClass() {
+    std::cout<<"TVMScriptRuntimeClass initializaion"<<std::endl;
+    mod_ = ThreadLocalStore::ThreadLocal() -> mod;
+  }
 
-    void testfunc() {
-        std::cout<<"test func"<<std::endl;
-    }
+  void testfunc() {
+    std::cout<<"test func"<<std::endl;
+  }
+
 
  private:
-//   runtime::Module module;
-  const int64_t num_inputs_;
-  const int64_t num_outputs_;
-  const std::string& device_;
+
+  tvm::runtime::Module mod_;
 
 };
 
 
+TVM_REGISTER_GLOBAL("tvmtorch.save_runtime_mod").set_body_typed([](tvm::runtime::Module mod) {
+  ThreadLocalStore::ThreadLocal()->mod = mod;
+});
+
 TORCH_LIBRARY(tvm_torch, m) {
   m.class_<TVMScriptRuntimeClass>("TVMScriptRuntime")
-  .def(torch::init<const int64_t, const int64_t, const std::string&>())
+  .def(torch::init<>())
   .def("testfunc", &TVMScriptRuntimeClass::testfunc);
+}
+
+}
 }
