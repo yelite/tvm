@@ -204,7 +204,6 @@ class TensorAsBuf {
       return;
     }
     if (device_type_ == kDLCPU) {
-      LOG(INFO) << "206 line!";
       memcpy(buf_ + offset_, origin_buf_, size_);
 #ifdef PT_TVMDSOOP_ENABLE_GPU
     } else if (device_type_ == kDLCUDA) {
