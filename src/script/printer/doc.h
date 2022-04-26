@@ -409,7 +409,7 @@ class ForDoc : public StmtDoc {
 
 class ScopeDocNode : public StmtDocNode {
  public:
-  ExprDoc lhs{nullptr};
+  Optional<ExprDoc> lhs{NullOpt};
   ExprDoc rhs{nullptr};
   Array<StmtDoc> body;
 
@@ -432,7 +432,7 @@ class ScopeDoc : public StmtDoc {
 
 class ExprStmtDocNode : public StmtDocNode {
  public:
-  Optional<ExprDoc> expr{NullOpt};
+  ExprDoc expr{nullptr};
 
   void VisitAttrs(AttrVisitor* v) {
     StmtDocNode::VisitAttrs(v);
@@ -445,7 +445,7 @@ class ExprStmtDocNode : public StmtDocNode {
 
 class ExprStmtDoc : public StmtDoc {
  public:
-  explicit ExprStmtDoc(Optional<ExprDoc> expr);
+  explicit ExprStmtDoc(ExprDoc expr);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ExprStmtDoc, StmtDoc, ExprStmtDocNode);
 };
 
@@ -457,7 +457,7 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-class FunctionDocNode : public DocNode {
+class FunctionDocNode : public StmtDocNode {
  public:
   IdDoc name{nullptr};
   Array<AssignDoc> args;
@@ -475,14 +475,14 @@ class FunctionDocNode : public DocNode {
   }
 
   static constexpr const char* _type_key = "script.FunctionDoc";
-  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, DocNode);
+  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, StmtDocNode);
 };
 
-class FunctionDoc : public Doc {
+class FunctionDoc : public StmtDoc {
  public:
   explicit FunctionDoc(IdDoc name, Array<AssignDoc> args, Array<ExprDoc> decorators,
                        ExprDoc return_type, Array<StmtDoc> body);
-  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(FunctionDoc, Doc, FunctionDocNode);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(FunctionDoc, StmtDoc, FunctionDocNode);
 };
 
 }  // namespace printer

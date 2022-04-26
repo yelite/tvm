@@ -18,11 +18,24 @@
  */
 #include "./ir_docsifier.h"
 
+#include "tvm/runtime/container/base.h"
+
 namespace tvm {
 namespace script {
 namespace printer {
 
+IRDocsifier::IRDocsifier(Map<String, String> ir_prefix) {
+  auto n = make_object<IRDocsifierNode>();
+  n->ir_prefix = std::move(ir_prefix);
+  data_ = std::move(n);
+}
+
 IRDocsifier::FType& IRDocsifier::vtable() {
+  static IRDocsifier::FType inst;
+  return inst;
+}
+
+IRDocsifier::FType& IRDocsifier::var_type_vtable() {
   static IRDocsifier::FType inst;
   return inst;
 }

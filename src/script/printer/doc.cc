@@ -214,13 +214,13 @@ TVM_REGISTER_GLOBAL("script.ScopeDoc")
       return ScopeDoc(lhs, rhs, body);
     });
 
-ExprStmtDoc::ExprStmtDoc(Optional<ExprDoc> expr) {
+ExprStmtDoc::ExprStmtDoc(ExprDoc expr) {
   ObjectPtr<ExprStmtDocNode> n = make_object<ExprStmtDocNode>();
   n->expr = expr;
   this->data_ = n;
 }
 TVM_REGISTER_NODE_TYPE(ExprStmtDocNode);
-TVM_REGISTER_GLOBAL("script.ExprStmtDoc").set_body_typed([](Optional<ExprDoc> expr) {
+TVM_REGISTER_GLOBAL("script.ExprStmtDoc").set_body_typed([](ExprDoc expr) {
   return ExprStmtDoc(expr);
 });
 

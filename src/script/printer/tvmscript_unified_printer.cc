@@ -17,18 +17,38 @@
  * under the License.
  */
 
-#include <tvm/tir/function.h>
 #include <tvm/tir/op.h>
 
-#include "./utils.h"
+#include "doc.h"
+#include "doc_printer.h"
+#include "ir_docsifier.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
 
-namespace {
-using namespace tir;
+String AsTVMScript(const ObjectRef& node, const String& tir_prefix) {
+  constexpr int32_t indent_spaces = 4;
+  Map<String, String> ir_prefix;
+  ir_prefix.Set("tir", tir_prefix);
+  IRDocsifier ir_docsifier(ir_prefix);
+
+  VarDefFrame def_frame = VarDefFrame(ir_docsifier->sym);
+  auto frame_ctx = ir_docsifier->WithFrame(def_frame);
+
+  Doc doc = ir_docsifier->AsDoc<Doc>(node);
+
+  Array<Doc> doc_to_print;
+  for (const StmtDoc& def : def_frame->stmts) {
+    doc_to_print.push_back(def);
+  }
+  doc_to_print.push_back(doc);
+
+  PythonDocPrinter doc_printer(indent_spaces);
+  return doc_printer.Print(doc);
 }
+
+TVM_REGISTER_GLOBAL("experiment.AsTVMScript").set_body_typed(AsTVMScript);
 
 }  // namespace printer
 }  // namespace script
