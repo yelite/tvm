@@ -47,68 +47,10 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
     mod_ = ThreadLocalStore::ThreadLocal() -> mod;
   }
 
-  c10::List<at::Tensor> forward(const c10::List<at::Tensor>& inputs) {
+  DLTensor forward(const DLTensor inputs) {
 
-    const auto inputs_len = inputs.size();
-
-    std::vector<DLTensor> args(inputs_len);
-    std::vector<tvm::runtime::NDArray> args_arr(inputs_len);
-
-    for (int i = 0; i < inputs_len; ++i) {
-      tvm::contrib::pytorch::TensorAsBuf input_buf(inputs[i]);
-      input_buf.CopyFromOrigin();
-      input_buf.MakeDLTensor(&args[i]);
-      args_arr[i] =
-          tvm::runtime::NDArray::FromDLPack(new DLManagedTensor({args[i], nullptr, nullptr}));
-    }
-
-    std::vector<TVMValue> tvm_values(inputs_len + 1);
-    std::vector<int> tvm_type_codes(inputs_len + 1);
-    tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-    setter(0, "main");
-    for (int k = 0; k < inputs_len; ++k) {
-      setter(k + 1, args_arr[k]);
-    }
-
-    auto set_input = mod_.GetFunction("set_input", false);
-    auto invoke = mod_.GetFunction("invoke", false);
-
-    set_input.CallPacked(
-        tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), inputs_len + 1), nullptr);
-
-    tvm::runtime::TVMRetValue ret = invoke("main");
-
-    // we assume only 1 outpus
-    std::vector<tvm::runtime::NDArray> output_arrs(1);
-    auto output_mismatch_msg = [](int actual, int expected) {
-      std::stringstream ss;
-      ss << "num_outputs not equal, actual:[" << actual << "] != expected:[" << expected << "]";
-      return ss.str();
-    };
-
-    std::vector<DLTensor> output_args(1);
-    c10::List<at::Tensor> outputs;
-    outputs.reserve(1);
-
-    for (int i = 0; i < 1; ++i) {
-      const auto& output_arr = output_arrs[i];
-      std::vector<int64_t> output_shape(output_arr->shape, output_arr->shape + output_arr->ndim);
-
-      torch::ScalarType output_dtype = torch::ScalarType::Undefined;
-      // CHECK(GetTorchDtype(output_arr.DataType(), &output_dtype));
-
-      // CHECK(device_type_ == kDLCPU || device_type_ == kDLCUDA);
-      const c10::DeviceType pt_device_type = torch::kCPU;
-      const auto options =
-          torch::TensorOptions().dtype(output_dtype).device(pt_device_type, 0);
-
-      outputs.emplace_back(torch::empty(output_shape, options));
-      tvm::contrib::pytorch::TensorAsBuf output_buf(outputs[i]);
-      output_buf.MakeDLTensor(&output_args[i]);
-      output_arr.CopyTo(&output_args[i]);
-      output_buf.CopyToOrigin();
-    }
-    return outputs;
+    
+    return inputs;
 
   }
 
