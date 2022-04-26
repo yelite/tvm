@@ -35,11 +35,11 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
     def forward(self, torch_inputs : List[torch.Tensor]) -> torch.Tensor :
         print("forward runs")
         # tensor_inputs = [tvm.nd.from_dlpack(torch.utils.dlpack.to_dlpack(i)) for i in torch_inputs]
-        tvm_output = self.engine.forward(torch_inputs)
+        self.engine.forward(torch_inputs)
         # torch_output = torch.utils.dlpack.from_dlpack(tvm_output)
-        return tvm_output
+        return torch_inputs[-1]
         
 
 
 def as_torch( func: tvm.ir.module.IRModule):
-    return TVMScriptModule(func)
+    return TVMScriptModuleWithCxx(func)
