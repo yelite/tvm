@@ -63,8 +63,8 @@ class MinuesOnes(torch.nn.Module):
         self.mat = matmul
 
     def forward(self, input):
-        ret = self.mat.forward(input) - 1
-        return ret
+        self.mat.forward(input)
+        return input[-1] -1
 
 def test_tvmscript_torch_matmul():
     s1 = np.ones((128,128)).astype("float32")
@@ -81,9 +81,9 @@ def test_tvmscript_torch_matmul():
 
     tvm_module = matmul
 
-    res = tvm_module([q1, q2, q3])
+    tvm_module([q1, q2, q3])
 
-    tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
+    tvm.testing.assert_allclose(q3.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
 def test_tvmscript_torch_decorator():
     s1 = np.arange(8).astype("float32")
@@ -96,9 +96,9 @@ def test_tvmscript_torch_decorator():
 
     tvm_module = MyModule
 
-    res = tvm_module([q1, q2])
+    tvm_module([q1, q2])
 
-    tvm.testing.assert_allclose(res.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
+    tvm.testing.assert_allclose(q2.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
 def test_torch_with_tvmscirpt():
     s1 = np.ones((128,128)).astype("float32")

@@ -44,13 +44,13 @@ struct ThreadLocalStore {
 class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
  public:
   TVMScriptRuntimeClass() {
-    std::cout<<"TVMScriptRuntimeClass initializaion"<<std::endl;
+    LOG(INFO) << "TVMScriptRuntimeClass initializaion" ;
     mod_ = ThreadLocalStore::ThreadLocal() -> mod;
   }
 
   void forward(const c10::List<at::Tensor>& inputs) {
 
-    std::cout<<"TVMScriptRuntimeClass forward"<<std::endl;
+    LOG(INFO) << "TVMScriptRuntimeClass forward" ;
 
     int input_length = inputs.size();
 
