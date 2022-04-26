@@ -27,11 +27,12 @@
 #include <vector>
 
 #include "../utils.h"
+#include "../DLconverter.h"
 
 namespace tvm {
 namespace contrib {
 
-// NOTE : this struct should be defined before TVMScriptRuntimeClass
+
 struct ThreadLocalStore {
   tvm::runtime::Module mod;
   static ThreadLocalStore* ThreadLocal() {
@@ -47,11 +48,29 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
     mod_ = ThreadLocalStore::ThreadLocal() -> mod;
   }
 
-  DLTensor forward(const DLTensor inputs) {
+  void forward(const c10::List<at::Tensor>& inputs) {
 
+    std::cout<<"TVMScriptRuntimeClass forward"<<std::endl;
+
+    int input_length = inputs.size();
+
+    std::vector<DLManagedTensor*> tensors;
+
+    for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
+
+
+    tvm::runtime::PackedFunc rt_func = mod_.GetFunction("__tvm_main__");
+
+    std::vector<TVMValue> tvm_values(input_length);
+    std::vector<int> tvm_type_codes(input_length);
+    tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
+    for (int k = 0; k < input_length; ++k) {
+      setter(k, tensors[k]);
+    }
+
+    rt_func.CallPacked(
+        tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
     
-    return inputs;
-
   }
 
 
