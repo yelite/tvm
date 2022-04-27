@@ -16,27 +16,31 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#include "./ir_docsifier.h"
+#ifndef TVM_SCRIPT_PRINTER_UTIL_H_
+#define TVM_SCRIPT_PRINTER_UTIL_H_
 
-#include "tvm/runtime/container/base.h"
+#include "./ir_docsifier.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
+template <typename DocType, typename NodeType>
 
-IRDocsifier::IRDocsifier(Map<String, String> ir_prefix) {
-  auto n = make_object<IRDocsifierNode>();
-  n->ir_prefix = std::move(ir_prefix);
-  data_ = std::move(n);
+Array<DocType> AsDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_docsifier) {
+  Array<DocType> result;
+  for (auto& ref : refs) {
+    result.push_back(ir_docsifier->AsExprDoc(ref));
+  }
+  return result;
 }
 
-IRDocsifier::FType& IRDocsifier::vtable() {
-  static IRDocsifier::FType inst;
-  return inst;
+template <typename NodeType>
+Array<ExprDoc> AsExprDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_docsifier) {
+  return AsDocArray<ExprDoc>(refs, ir_docsifier);
 }
-
-TVM_REGISTER_NODE_TYPE(IRDocsifierNode);
 
 }  // namespace printer
 }  // namespace script
 }  // namespace tvm
+
+#endif

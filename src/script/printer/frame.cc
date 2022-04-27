@@ -25,7 +25,7 @@ namespace printer {
 MetadataFrame::MetadataFrame(SymbolTable sym) {
   ObjectPtr<MetadataFrameNode> n = make_object<MetadataFrameNode>();
   n->objs.clear();
-  n->sym = std::move(sym);
+  n->sym = sym.get();
   n->metadata.clear();
   data_ = std::move(n);
 }
@@ -33,7 +33,7 @@ MetadataFrame::MetadataFrame(SymbolTable sym) {
 VarDefFrame::VarDefFrame(SymbolTable sym) {
   ObjectPtr<VarDefFrameNode> n = make_object<VarDefFrameNode>();
   n->objs.clear();
-  n->sym = std::move(sym);
+  n->sym = sym.get();
   n->stmts.clear();
   data_ = std::move(n);
 }

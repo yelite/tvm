@@ -30,11 +30,10 @@ namespace printer {
 class FrameNode : public Object {
  public:
   Array<ObjectRef> objs;
-  SymbolTable sym;
+  SymbolTableNode* sym;
 
   void VisitAttrs(tvm::AttrVisitor* v) {
     v->Visit("objs", &objs);
-    v->Visit("sym", &sym);
   }
 
   static constexpr const char* _type_key = "script.Frame";
@@ -88,7 +87,7 @@ class MetadataFrameNode : public FrameNode {
 
 class MetadataFrame : public Frame {
  public:
-  explicit MetadataFrame(SymbolTable sym);
+  MetadataFrame();
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(MetadataFrame, Frame, MetadataFrameNode);
 };
 

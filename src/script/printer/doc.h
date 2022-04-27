@@ -26,6 +26,8 @@ namespace tvm {
 namespace script {
 namespace printer {
 
+// TODO: Add doc node for class
+
 class DocNode : public Object {
  public:
   mutable Optional<ObjectRef> source{NullOpt};
@@ -148,6 +150,7 @@ class LiteralDoc : public ExprDoc {
  public:
   static LiteralDoc None() { return LiteralDoc(ObjectRef(nullptr)); }
   static LiteralDoc Int(IntImm v) { return LiteralDoc(v); }
+  static LiteralDoc Int(int64_t v) { return LiteralDoc(IntImm(DataType::Int(64), v)); }
   static LiteralDoc Bool(Bool v) { return LiteralDoc(v); }
   static LiteralDoc Float(FloatImm v) { return LiteralDoc(v); }
   static LiteralDoc Str(String v) { return LiteralDoc(v); }
@@ -309,6 +312,7 @@ class TupleDocNode : public ExprDocNode {
 
 class TupleDoc : public ExprDoc {
  public:
+  TupleDoc() {}
   explicit TupleDoc(Array<ExprDoc> elements);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(TupleDoc, ExprDoc, TupleDocNode);
 };
@@ -328,6 +332,7 @@ class ListDocNode : public ExprDocNode {
 
 class ListDoc : public ExprDoc {
  public:
+  ListDoc() {}
   explicit ListDoc(Array<ExprDoc> elements);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ListDoc, ExprDoc, ListDocNode);
 };
@@ -349,6 +354,7 @@ class DictDocNode : public ExprDocNode {
 
 class DictDoc : public ExprDoc {
  public:
+  DictDoc() {}
   explicit DictDoc(Array<ExprDoc> keys, Array<ExprDoc> values);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(DictDoc, ExprDoc, DictDocNode);
 };

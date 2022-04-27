@@ -27,13 +27,13 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-String AsTVMScript(const ObjectRef& node, const String& tir_prefix) {
-  constexpr int32_t indent_spaces = 4;
-  Map<String, String> ir_prefix;
-  ir_prefix.Set("tir", tir_prefix);
+String AsTVMScript(const ObjectRef& node, Map<String, String> ir_prefix, int32_t indent_spaces) {
   IRDocsifier ir_docsifier(ir_prefix);
 
-  VarDefFrame def_frame = VarDefFrame(ir_docsifier->sym);
+  // TODO: Handle metadata frame
+  MetadataFrame metadata_frame(ir_docsifier->sym);
+  VarDefFrame def_frame(ir_docsifier->sym);
+  auto metadata_frame_ctx = ir_docsifier->WithFrame(metadata_frame);
   auto frame_ctx = ir_docsifier->WithFrame(def_frame);
 
   Doc doc = ir_docsifier->AsDoc<Doc>(node);

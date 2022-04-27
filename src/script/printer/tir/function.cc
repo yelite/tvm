@@ -35,7 +35,7 @@ class PrimFuncFrame : public TIRFrame {
  public:
   explicit PrimFuncFrame(SymbolTable sym) {
     ObjectPtr<PrimFuncFrameNode> n = make_object<PrimFuncFrameNode>();
-    n->sym = std::move(sym);
+    n->sym = sym.get();
     data_ = std::move(n);
   }
   static constexpr const char* _type_key = "script.PrimFuncFrame";

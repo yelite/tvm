@@ -40,12 +40,6 @@ class IRDocsifierNode : public Object {
   Array<Frame> frames;
   Array<String> dispatch_tokens;
 
-  Array<ObjectRef> path_to_current_node;
-  // element_indices/counts are associated with the node in `path_to_current_node` with
-  // the same index. These represent their order among siblings.
-  std::vector<size_t> node_indices;
-  std::vector<size_t> node_counts;
-
   void VisitAttrs(tvm::AttrVisitor* v) {
     v->Visit("ir_prefix", &ir_prefix);
     v->Visit("sym", &sym);
@@ -58,21 +52,11 @@ class IRDocsifierNode : public Object {
 
  public:
   template <class TDoc>
-  TDoc AsDoc(const ObjectRef& obj) {
+  TDoc AsDoc(const ObjectRef& obj) const {
     return Downcast<TDoc>(AsDocImpl(obj));
   }
 
-  template <typename DocType, typename NodeType>
-  Array<DocType> AsDocArray(const Array<NodeType>& refs);
-
   ExprDoc AsExprDoc(const ObjectRef& ref) { return AsDoc<ExprDoc>(ref); }
-
-  template <typename NodeType>
-  Array<ExprDoc> AsExprDocArray(const Array<NodeType>& refs) {
-    return AsDocArray<ExprDoc>(refs);
-  }
-
-  ExprDoc ToVariableTypeDoc(const ObjectRef& ref);
 
   WithCtx WithDispatchToken(const String& token) {
     this->dispatch_tokens.push_back(token);
@@ -92,10 +76,8 @@ class IRDocsifierNode : public Object {
   template <typename FrameType>
   Optional<FrameType> GetFrame() const;
 
-  bool IsLastChild() const { return node_indices.back() + 1 == node_counts.back(); };
-
  private:
-  Doc AsDocImpl(const ObjectRef& obj, size_t node_index = 0, size_t node_count = 1);
+  Doc AsDocImpl(const ObjectRef& obj) const;
 };
 
 class IRDocsifier : public ObjectRef {
@@ -107,7 +89,6 @@ class IRDocsifier : public ObjectRef {
 
   using FType = ObjectFunctor<printer::Doc(const ObjectRef&, IRDocsifier)>;
   TVM_DLL static FType& vtable();
-  TVM_DLL static FType& var_type_vtable();
 };
 
 template <typename FrameType>
@@ -120,44 +101,8 @@ Optional<FrameType> IRDocsifierNode::GetFrame() const {
   return NullOpt;
 }
 
-inline Doc ToDocWithFunctor(IRDocsifierNode* ir_docsifier, IRDocsifier::FType& functor,
-                            const ObjectRef& obj, size_t node_index, size_t node_count) {
-  ir_docsifier->path_to_current_node.push_back(obj);
-  ir_docsifier->node_indices.push_back(node_index);
-  ir_docsifier->node_counts.push_back(node_count);
-
-  Doc doc = functor(ir_docsifier->dispatch_tokens.back(), obj, GetRef<IRDocsifier>(ir_docsifier));
-  doc->source = obj;
-
-  ir_docsifier->node_counts.pop_back();
-  ir_docsifier->node_indices.pop_back();
-  ir_docsifier->path_to_current_node.pop_back();
-
-  return doc;
-}
-
-inline Doc IRDocsifierNode::AsDocImpl(const ObjectRef& obj, size_t node_index, size_t node_count) {
-  return ToDocWithFunctor(this, IRDocsifier::vtable(), obj, node_index, node_count);
-}
-
-inline ExprDoc IRDocsifierNode::ToVariableTypeDoc(const ObjectRef& obj) {
-  // TODO: remove downcase and make functor return ExprDoc directly
-  return Downcast<ExprDoc>(ToDocWithFunctor(this, IRDocsifier::var_type_vtable(), obj, 0, 1));
-}
-
-template <typename DocType, typename NodeType>
-Array<DocType> IRDocsifierNode::AsDocArray(const Array<NodeType>& refs) {
-  Array<DocType> result;
-
-  size_t index = 0;
-  size_t count = refs.size();
-
-  for (auto& ref : refs) {
-    result.push_back(Downcast<DocType>(AsDocImpl(ref, index, count)));
-    index++;
-  }
-
-  return result;
+inline Doc IRDocsifierNode::AsDocImpl(const ObjectRef& obj) const {
+  return IRDocsifier::vtable()(dispatch_tokens.back(), obj, GetRef<IRDocsifier>(this));
 }
 
 }  // namespace printer
