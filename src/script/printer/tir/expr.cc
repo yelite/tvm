@@ -132,9 +132,32 @@ ExprDoc PrintShuffle(tir::Shuffle e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Shuffle>(PrintShuffle);
 
 ExprDoc PrintCommReducer(tir::CommReducer e, IRDocsifier p) {
-  // TODO: Lambda
-  throw;
+  TIRFrame frame(p->sym);
+  WithCtx with_frame = p->WithFrame(frame);
+
+  Array<IdDoc> reducer_args;
+  for (const tir::Var& v_lhs : e->lhs) {
+    IdDoc var_doc = frame->DefByName(v_lhs, p->sym->GetUniqueName(v_lhs->name_hint));
+    reducer_args.push_back(var_doc);
+  }
+  for (const tir::Var& v_rhs : e->rhs) {
+    IdDoc var_doc = frame->DefByName(v_rhs, p->sym->GetUniqueName(v_rhs->name_hint));
+    reducer_args.push_back(var_doc);
+  }
+
+  ExprDoc reducer_body = TupleDoc();
+  if (e->rhs.size() == 1) {
+    reducer_body = p->AsExprDoc(e->result[0]);
+  } else {
+    reducer_body = TupleDoc(AsExprDocArray(e->result, p));
+  }
+
+  LambdaDoc reducer{reducer_args, reducer_body};
+  ListDoc identity_elements{AsExprDocArray(e->identity_element, p)};
+
+  return TIR(p)->Attr("comm_reducer")->Call({reducer, identity_elements});
 }
+
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::CommReducer>(PrintCommReducer);
 
 ExprDoc PrintReduce(tir::Reduce e, IRDocsifier p) {

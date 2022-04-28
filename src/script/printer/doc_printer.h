@@ -42,6 +42,7 @@ class DocPrinter {
   virtual void PrintTypedDoc(const IndexDoc& doc) = 0;
   virtual void PrintTypedDoc(const OperationDoc& doc) = 0;
   virtual void PrintTypedDoc(const CallDoc& doc) = 0;
+  virtual void PrintTypedDoc(const LambdaDoc& doc) = 0;
   virtual void PrintTypedDoc(const ListDoc& doc) = 0;
   virtual void PrintTypedDoc(const DictDoc& doc) = 0;
   virtual void PrintTypedDoc(const TupleDoc& doc) = 0;
@@ -77,6 +78,7 @@ class PythonDocPrinter : public DocPrinter {
   void PrintTypedDoc(const IndexDoc& doc) final;
   void PrintTypedDoc(const OperationDoc& doc) final;
   void PrintTypedDoc(const CallDoc& doc) final;
+  void PrintTypedDoc(const LambdaDoc& doc) final;
   void PrintTypedDoc(const ListDoc& doc) final;
   void PrintTypedDoc(const DictDoc& doc) final;
   void PrintTypedDoc(const TupleDoc& doc) final;

@@ -124,6 +124,17 @@ TVM_REGISTER_GLOBAL("script.CallDoc")
       return CallDoc(callee, args, kwargs_keys, kwargs_values);
     });
 
+LambdaDoc::LambdaDoc(Array<IdDoc> args, ExprDoc body) {
+  ObjectPtr<LambdaDocNode> n = make_object<LambdaDocNode>();
+  n->args = args;
+  n->body = body;
+  this->data_ = n;
+}
+TVM_REGISTER_NODE_TYPE(LambdaDocNode);
+TVM_REGISTER_GLOBAL("script.LambdaDoc").set_body_typed([](Array<IdDoc> args, ExprDoc body) {
+  return LambdaDoc(args, body);
+});
+
 OperationDoc::OperationDoc(OperationDocNode::Kind kind, Array<ExprDoc> operands) {
   ObjectPtr<OperationDocNode> n = make_object<OperationDocNode>();
   n->kind = kind;

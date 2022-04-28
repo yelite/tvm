@@ -297,6 +297,27 @@ class OperationDoc : public ExprDoc {
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(OperationDoc, ExprDoc, OperationDocNode);
 };
 
+class LambdaDocNode : public ExprDocNode {
+ public:
+  Array<IdDoc> args;
+  ExprDoc body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    ExprDocNode::VisitAttrs(v);
+    v->Visit("args", &args);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.Lambda";
+  TVM_DECLARE_FINAL_OBJECT_INFO(LambdaDocNode, ExprDocNode);
+};
+
+class LambdaDoc : public ExprDoc {
+ public:
+  explicit LambdaDoc(Array<IdDoc> args, ExprDoc body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(LambdaDoc, ExprDoc, LambdaDocNode);
+};
+
 class TupleDocNode : public ExprDocNode {
  public:
   Array<ExprDoc> elements;
@@ -312,7 +333,7 @@ class TupleDocNode : public ExprDocNode {
 
 class TupleDoc : public ExprDoc {
  public:
-  TupleDoc() {}
+  TupleDoc() : TupleDoc(runtime::make_object<TupleDocNode>()) {}
   explicit TupleDoc(Array<ExprDoc> elements);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(TupleDoc, ExprDoc, TupleDocNode);
 };
@@ -332,7 +353,7 @@ class ListDocNode : public ExprDocNode {
 
 class ListDoc : public ExprDoc {
  public:
-  ListDoc() {}
+  ListDoc() : ListDoc(runtime::make_object<ListDocNode>()) {}
   explicit ListDoc(Array<ExprDoc> elements);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ListDoc, ExprDoc, ListDocNode);
 };
@@ -354,7 +375,7 @@ class DictDocNode : public ExprDocNode {
 
 class DictDoc : public ExprDoc {
  public:
-  DictDoc() {}
+  DictDoc() : DictDoc(runtime::make_object<DictDocNode>()) {}
   explicit DictDoc(Array<ExprDoc> keys, Array<ExprDoc> values);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(DictDoc, ExprDoc, DictDocNode);
 };

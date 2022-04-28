@@ -47,6 +47,11 @@ class TIRFrame : public Frame {
   TIRFrame() = default;
 
  public:
+  explicit TIRFrame(SymbolTable sym) {
+    ObjectPtr<TIRFrameNode> n = make_object<TIRFrameNode>();
+    n->sym = sym.get();
+    data_ = std::move(n);
+  }
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRFrame, Frame, TIRFrameNode);
 };
 

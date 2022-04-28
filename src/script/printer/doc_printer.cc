@@ -54,6 +54,8 @@ void DocPrinter::PrintDoc(const Doc& doc) {
     PrintTypedDoc(GetRef<OperationDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<CallDocNode>()) {
     PrintTypedDoc(GetRef<CallDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<LambdaDocNode>()) {
+    PrintTypedDoc(GetRef<LambdaDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<ListDocNode>()) {
     PrintTypedDoc(GetRef<ListDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<DictDocNode>()) {
@@ -146,6 +148,12 @@ void PythonDocPrinter::PrintTypedDoc(const CallDoc& doc) {
   PrintJoinedElements("(", doc->args, ", ", ")");
 }
 
+void PythonDocPrinter::PrintTypedDoc(const LambdaDoc& doc) {
+  output_ << "lambda ";
+  PrintJoinedElements("", doc->args, ", ", ": ");
+  PrintDoc(doc->body);
+}
+
 void PythonDocPrinter::PrintTypedDoc(const ListDoc& doc) {
   size_t size = doc->elements.size();
   if (size == 0) {
@@ -201,10 +209,10 @@ void PythonDocPrinter::PrintTypedDoc(const ExprStmtDoc& doc) {
 
 void PythonDocPrinter::PrintTypedDoc(const ScopeDoc& doc) {
   output_ << "with ";
-  PrintDoc(doc->lhs);
-  if (doc->rhs != nullptr) {
+  PrintDoc(doc->rhs);
+  if (doc->lhs != nullptr) {
     output_ << " as ";
-    PrintDoc(doc->rhs.value());
+    PrintDoc(doc->lhs.value());
   }
   output_ << ":";
   NewLine();
