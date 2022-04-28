@@ -18,6 +18,7 @@
  */
 
 #include <tvm/node/functor.h>
+#include <tvm/runtime/container/array.h>
 #include <tvm/runtime/data_type.h>
 #include <tvm/tir/expr.h>
 #include <tvm/tir/op.h>
@@ -60,11 +61,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Select>(PrintSelect
 
 ExprDoc PrintBufferLoad(tir::BufferLoad e, IRDocsifier p) {
   ExprDoc base = p->AsExprDoc(e->buffer);
-  if (e->indices.size() == 0) {
-    return base->Index({TupleDoc()});
-  } else {
-    return base->Index(AsDocArray<Doc>(e->indices, p));
-  }
+  return base->Index(AsDocArray<Doc>(e->indices, p));
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BufferLoad>(PrintBufferLoad);
 
@@ -76,17 +73,8 @@ ExprDoc PrintProducerLoad(tir::ProducerLoad e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::ProducerLoad>(PrintProducerLoad);
 
 ExprDoc PrintLoad(tir::Load e, IRDocsifier p) {
-  if (e->dtype == DataType::Float(32) && tir::is_one(e->predicate) &&
-      e->buffer_var->dtype == DataType::Float(32)) {
-    return p->AsExprDoc(e->buffer_var)->Index({p->AsExprDoc(e->index)});
-  } else {
-    Array<ExprDoc> args{LiteralDoc::Str(DLDataType2String(e->dtype)), p->AsExprDoc(e->buffer_var),
-                        p->AsExprDoc(e->index)};
-    if (!tir::is_one(e->predicate) || e->dtype.lanes() != 1) {
-      args.push_back(p->AsExprDoc(e->predicate));
-    }
-    return TIR(p)->Attr("load")->Call(args);
-  }
+  LOG(FATAL) << "Cannot print a tir.Load";
+  throw;
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Load>(PrintLoad);
 
@@ -108,21 +96,15 @@ ExprDoc PrintLet(tir::Let e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Let>(PrintLet);
 
 ExprDoc PrintCall(tir::Call e, IRDocsifier p) {
-  ExprDoc callee = IdDoc("");
   if (const auto* op = e->op.as<OpNode>()) {
-    std::string name = op->name;
-    if (name.find("tir.") == 0) {
-      callee = TIR(p)->Attr(name.substr(4));
-    } else {
-      callee = IdDoc(name);
-    }
+    Array<ExprDoc> args{LiteralDoc::Str(op->name)};
+    args = Concat(args, AsExprDocArray(e->args, p));
+    return TIR(p)->Attr("call")->Call(args);
   } else {
     const auto* op_gvar = e->op.as<GlobalVarNode>();
     ICHECK(op_gvar != nullptr);
-    callee = IdDoc(op_gvar->name_hint);
+    return IdDoc(op_gvar->name_hint)->Call(AsExprDocArray(e->args, p));
   }
-  return callee->Call(AsExprDocArray(e->args, p), {"dtype"},
-                      {LiteralDoc::Str(DLDataType2String(e->dtype))});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Call>(PrintCall);
 
