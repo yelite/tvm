@@ -86,8 +86,10 @@ void PythonDocPrinter::PrintTypedDoc(const LiteralDoc& doc) {
     PrintNumberNode(Downcast<PrimExpr>(doc->value));
   } else if (const auto* string_obj = value.as<StringObj>()) {
     PrintStringLiteral(GetRef<String>(string_obj));
-  } else if (const auto* node = doc.as<tir::StringImmNode>()) {
+  } else if (const auto* node = value.as<tir::StringImmNode>()) {
     PrintStringLiteral(node->value);
+  } else if (!value.defined()) {
+    output_ << "None";
   } else {
     ICHECK(false) << "Unsupported literal value type " << value->GetTypeKey();
   }

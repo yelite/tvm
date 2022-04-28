@@ -17,13 +17,13 @@
  * under the License.
  */
 
-#include <tvm/tir/function.h>
+#include <tvm/node/functor.h>
+#include <tvm/runtime/data_type.h>
+#include <tvm/tir/expr.h>
 #include <tvm/tir/op.h>
 
 #include "../util.h"
 #include "./utils.h"
-#include "tvm/node/functor.h"
-#include "tvm/runtime/data_type.h"
 
 namespace tvm {
 namespace script {
@@ -165,6 +165,10 @@ ExprDoc PrintReduce(tir::Reduce e, IRDocsifier p) {
                                        p->AsExprDoc(e->axis), LiteralDoc::Int(e->value_index)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Reduce>(PrintReduce);
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<Range>([](Range e, IRDocsifier p) {
+  return SliceDoc(p->AsExprDoc(e->min), p->AsExprDoc(e->min + e->extent));
+});
 
 ExprDoc PrintAny(tir::Any e, IRDocsifier p) {
   LOG(FATAL) << "Cannot print any shape";
