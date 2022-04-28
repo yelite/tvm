@@ -434,8 +434,10 @@ class TVMScriptParser(Transformer):
             """Check the decorator is `T.prim_func or as_torch"""
             if len(decorators) > 2:
                 return False
-            if len(decorators) == 2 and decorators[0].id.name != "as_torch":
-                return False
+            if len(decorators) == 2: 
+                indicator = decorators[0]
+                if isinstance(indicator, ast.Call) and indicator.func_name.id.name != "as_torch":
+                    return False
             d: ast.Expr = decorators[-1]
             return (
                 isinstance(d, ast.Attr)

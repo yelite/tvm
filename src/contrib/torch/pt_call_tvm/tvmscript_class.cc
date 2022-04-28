@@ -44,20 +44,18 @@ struct ThreadLocalStore {
 class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
  public:
   TVMScriptRuntimeClass() {
-    LOG(INFO) << "TVMScriptRuntimeClass initializaion" ;
+
     mod_ = ThreadLocalStore::ThreadLocal() -> mod;
   }
 
   void forward(const c10::List<at::Tensor>& inputs) {
 
-    LOG(INFO) << "TVMScriptRuntimeClass forward" ;
 
     int input_length = inputs.size();
 
     std::vector<DLManagedTensor*> tensors;
 
-    for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
-
+    for (int i = 0; i < input_length; ++i) tensors.push_back(ToDLPack(inputs[i]));
 
     tvm::runtime::PackedFunc rt_func = mod_.GetFunction("__tvm_main__");
 
@@ -65,12 +63,16 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
     std::vector<int> tvm_type_codes(input_length);
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
     for (int k = 0; k < input_length; ++k) {
-      setter(k, tensors[k]);
+      setter(k, &tensors[k]->dl_tensor);
     }
 
     rt_func.CallPacked(
         tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
     
+    for (int k = 0; k < input_length; ++k) {
+      LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
+      tensors[k]->deleter;
+    }
   }
 
 

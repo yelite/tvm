@@ -25,7 +25,7 @@ import numpy as np
 import torch.nn
 import tvm.testing
 
-@as_torch
+@as_torch(device = 'cpu')
 @T.prim_func
 def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
     A = T.match_buffer(a, [128, 128])
@@ -39,7 +39,7 @@ def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
                 C[vi, vj] = T.float32(0)
             C[vi, vj] = C[vi, vj] + A[vi, vk] * B[vj, vk]
 
-@as_torch
+@as_torch(device = 'cpu')
 @tvm.script.ir_module
 class MyModule:
     @T.prim_func
@@ -97,6 +97,8 @@ def test_tvmscript_torch_decorator():
     tvm_module = MyModule
 
     tvm_module([q1, q2])
+
+    # print(q2)
 
     tvm.testing.assert_allclose(q2.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 

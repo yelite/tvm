@@ -1,3 +1,21 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
 #include <dlpack/dlpack.h>
 #include <torch/custom_class.h>
 #include <torch/script.h>
@@ -16,7 +34,7 @@ void deleter(DLManagedTensor* arg) {
   delete static_cast<ATenDLMTensor*>(arg->manager_ctx);
 }
 
-DLDevice getDLDevice(const at::Tensor& tensor, const int64_t& device_id) {
+DLDevice GetDLDevice(const at::Tensor& tensor, const int64_t& device_id) {
   DLDevice ctx;
   ctx.device_id = device_id;
   switch (tensor.device().type()) {
@@ -44,7 +62,7 @@ DLDevice getDLDevice(const at::Tensor& tensor, const int64_t& device_id) {
   return ctx;
 }
 
-DLDataType getDLDataType(const at::Tensor& t) {
+DLDataType GetDLDataType(const at::Tensor& t) {
   DLDataType dtype;
   dtype.lanes = 1;
   dtype.bits = t.element_size() * 8;
@@ -104,8 +122,9 @@ DLDataType getDLDataType(const at::Tensor& t) {
 }
 
 
-DLManagedTensor* toDLPack(const at::Tensor& src) {
+DLManagedTensor* ToDLPack(const at::Tensor& src) {
     ATenDLMTensor* atDLMTensor(new ATenDLMTensor);
+    LOG(INFO) << "new: "<<atDLMTensor;
     atDLMTensor->handle = src;
     atDLMTensor->tensor.manager_ctx = atDLMTensor;
     atDLMTensor->tensor.deleter = &deleter;
@@ -116,17 +135,15 @@ DLManagedTensor* toDLPack(const at::Tensor& src) {
       device_id = src.get_device();
     }
 
-    atDLMTensor->tensor.dl_tensor.device = getDLDevice(src, device_id);
+    atDLMTensor->tensor.dl_tensor.device = GetDLDevice(src, device_id);
     atDLMTensor->tensor.dl_tensor.ndim = src.dim();
-    atDLMTensor->tensor.dl_tensor.dtype = getDLDataType(src);
-
+    atDLMTensor->tensor.dl_tensor.dtype = GetDLDataType(src);
     atDLMTensor->tensor.dl_tensor.shape =
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       const_cast<int64_t*>(src.sizes().data());
     atDLMTensor->tensor.dl_tensor.strides =
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
         const_cast<int64_t*>(src.strides().data());
     atDLMTensor->tensor.dl_tensor.byte_offset = 0;
+
     return &(atDLMTensor->tensor);
 
 }
