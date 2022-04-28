@@ -27,7 +27,7 @@
 #include <vector>
 
 #include "../utils.h"
-#include "../DLconverter.h"
+#include "../dlconverter.h"
 
 namespace tvm {
 namespace contrib {
@@ -71,7 +71,7 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
     
     for (int k = 0; k < input_length; ++k) {
       // LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
-      tensors[k]->deleter;
+      tensors[k]->deleter(tensors[k]);
     }
   }
 

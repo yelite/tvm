@@ -111,6 +111,7 @@ DLDataType GetDLDataType(const at::Tensor& t) {
     case ScalarType::QInt8:
     case ScalarType::QUInt8:
     case ScalarType::QInt32:
+    case ScalarType::QUInt4x2:
       TORCH_CHECK(false, "QUInt/QInt types are not supported by dlpack");
       break;
     case ScalarType::Undefined:

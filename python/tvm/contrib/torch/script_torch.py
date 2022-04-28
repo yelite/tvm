@@ -44,13 +44,8 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         if device == None:
             runtime_module = tvm.build(ir_module)
         elif device == "cuda":
-            sch = tvm.tir.Schedule(ir_module)
-            block_b = sch.get_block("B")
-            (i,) = sch.get_loops(block_b)
-            i_0, i_1, i_2 = sch.split(i, factors=[2, 2, 2])
-            sch.bind(i_0, "blockIdx.x")
-            sch.bind(i_2, "threadIdx.x")
-            runtime_module = tvm.build(sch.mod, target = "cuda")
+            # Cuda not supported yet
+            return
         
         func = tvm.get_global_func("tvmtorch.save_runtime_mod")
         func(runtime_module)
@@ -59,9 +54,7 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         
 
     def forward(self, torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
-        # tensor_inputs = [tvm.nd.from_dlpack(torch.utils.dlpack.to_dlpack(i)) for i in torch_inputs]
         return self.engine.forward(torch_inputs)
-        # torch_output = torch.utils.dlpack.from_dlpack(tvm_output)
         
 
 
