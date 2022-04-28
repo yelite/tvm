@@ -124,7 +124,6 @@ DLDataType GetDLDataType(const at::Tensor& t) {
 
 DLManagedTensor* ToDLPack(const at::Tensor& src) {
     ATenDLMTensor* atDLMTensor(new ATenDLMTensor);
-    LOG(INFO) << "new: "<<atDLMTensor;
     atDLMTensor->handle = src;
     atDLMTensor->tensor.manager_ctx = atDLMTensor;
     atDLMTensor->tensor.deleter = &deleter;

@@ -25,7 +25,7 @@ import numpy as np
 import torch.nn
 import tvm.testing
 
-@as_torch(device = 'cpu')
+@as_torch()
 @T.prim_func
 def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
     A = T.match_buffer(a, [128, 128])
@@ -39,9 +39,27 @@ def matmul(a: T.handle, b: T.handle, c: T.handle) -> None:
                 C[vi, vj] = T.float32(0)
             C[vi, vj] = C[vi, vj] + A[vi, vk] * B[vj, vk]
 
-@as_torch(device = 'cpu')
+
+@as_torch()
 @tvm.script.ir_module
 class MyModule:
+    @T.prim_func
+    def main(a: T.handle, b: T.handle):
+        # We exchange data between function by handles, which are similar to pointer.
+        T.func_attr({"global_symbol": "main", "tir.noalias": True})
+        # Create buffer from handles.
+        A = T.match_buffer(a, (8,), dtype="float32")
+        B = T.match_buffer(b, (8,), dtype="float32")
+        for i in range(8):
+            # A block is an abstraction for computation.
+            with T.block("B"):
+                # Define a spatial block iterator and bind it to value i.
+                vi = T.axis.spatial(8, i)
+                B[vi] = A[vi] + 1.0
+
+@as_torch(device = "cuda")
+@tvm.script.ir_module
+class MyModule_cuda:
     @T.prim_func
     def main(a: T.handle, b: T.handle):
         # We exchange data between function by handles, which are similar to pointer.
@@ -85,12 +103,26 @@ def test_tvmscript_torch_matmul():
 
     tvm.testing.assert_allclose(q3.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
+def test_tvmscript_torch_mymodule_cuda():
+    s1 = np.arange(8).astype("float32")
+
+    q1 = torch.arange(8).type(torch.float32).cuda()
+    q2 = torch.zeros((8,), dtype=torch.float32).cuda()
+
+    numpy_result = s1 + 1
+
+    tvm_module = MyModule_cuda
+
+    tvm_module([q1, q2])
+
+
+    tvm.testing.assert_allclose(q2.cpu().numpy(), numpy_result, atol=1e-5, rtol=1e-5)
+
 def test_tvmscript_torch_decorator():
     s1 = np.arange(8).astype("float32")
-    s2 = np.zeros((8,)).astype("float32")
 
-    q1 = torch.from_numpy(s1)
-    q2 = torch.from_numpy(s2)
+    q1 = torch.arange(8).type(torch.float32)
+    q2 = torch.zeros((8,), dtype=torch.float32)
 
     numpy_result = s1 + 1
 
@@ -98,7 +130,6 @@ def test_tvmscript_torch_decorator():
 
     tvm_module([q1, q2])
 
-    # print(q2)
 
     tvm.testing.assert_allclose(q2.numpy(), numpy_result, atol=1e-5, rtol=1e-5)
 
@@ -126,3 +157,4 @@ if __name__ == "__main__":
     test_tvmscript_torch_matmul()
     test_tvmscript_torch_decorator()
     test_torch_with_tvmscirpt()
+    test_tvmscript_torch_mymodule_cuda()

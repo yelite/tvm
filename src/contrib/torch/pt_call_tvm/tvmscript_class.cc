@@ -70,7 +70,7 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
         tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
     
     for (int k = 0; k < input_length; ++k) {
-      LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
+      // LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
       tensors[k]->deleter;
     }
   }

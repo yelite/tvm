@@ -36,12 +36,21 @@ class TVMScriptModule(torch.nn.Module):
         return torch_output
 
 class TVMScriptModuleWithCxx(torch.nn.Module):
-    def __init__(self, ir_module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc], device):
+    def __init__(self, ir_module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc], device : str):
         super().__init__()
         libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
         torch.classes.load_library(libpt_path)
 
-        runtime_module = tvm.build(ir_module, target = "llvm")
+        if device == None:
+            runtime_module = tvm.build(ir_module)
+        elif device == "cuda":
+            sch = tvm.tir.Schedule(ir_module)
+            block_b = sch.get_block("B")
+            (i,) = sch.get_loops(block_b)
+            i_0, i_1, i_2 = sch.split(i, factors=[2, 2, 2])
+            sch.bind(i_0, "blockIdx.x")
+            sch.bind(i_2, "threadIdx.x")
+            runtime_module = tvm.build(sch.mod, target = "cuda")
         
         func = tvm.get_global_func("tvmtorch.save_runtime_mod")
         func(runtime_module)
@@ -49,14 +58,14 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         self.engine = torch.classes.tvm_torch.TVMScriptRuntime()
         
 
-    def forward(self, torch_inputs : List[torch.Tensor]) -> None :
+    def forward(self, torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
         # tensor_inputs = [tvm.nd.from_dlpack(torch.utils.dlpack.to_dlpack(i)) for i in torch_inputs]
-        self.engine.forward(torch_inputs)
+        return self.engine.forward(torch_inputs)
         # torch_output = torch.utils.dlpack.from_dlpack(tvm_output)
         
 
 
-def as_torch(device : str):
+def as_torch(device : str = None):
     def inner(func: tvm.ir.module.IRModule):
         return TVMScriptModuleWithCxx(func, device)
     return inner
