@@ -31,29 +31,17 @@ namespace printer {
 
 ExprDoc PrintVar(tir::Var v, IRDocsifier p) {
   Optional<ExprDoc> var_doc = p->sym->GetObjectDoc(v);
-  if (var_doc == nullptr) {
-    auto frame = p->GetFrame<VarDefFrame>().value();
-    IdDoc free_var_doc = frame->DefByName(v, p->sym->GetUniqueName(v->name_hint));
-    return free_var_doc;
-  } else {
-    return var_doc.value();
-  }
+  ICHECK_NOTNULL(var_doc);
+  return var_doc.value();
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Var>(PrintVar);
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::SizeVar>(PrintVar);
 
 ExprDoc PrintIterVar(tir::IterVar v, IRDocsifier p) {
-  ExprDoc dom_arg = LiteralDoc::None();
-  if (v->dom.defined()) {
-    Range dom = v->dom;
-    dom_arg = IdDoc("slice")->Call({p->AsExprDoc(dom->min), p->AsExprDoc(dom->min + dom->extent)});
-  }
-
-  return TIR(p)
-      ->Attr("iter_var")
-      ->Call({p->AsExprDoc(v->var), dom_arg, LiteralDoc::Str(IterVarType2String(v->iter_type)),
-              LiteralDoc::Str(v->thread_tag)});
+  LOG(FATAL) << "Cannot print iter var directly. Please use the helper functions in tir.h for "
+                "specific usage of IterVar.";
+  throw;
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::IterVar>(PrintIterVar);

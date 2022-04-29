@@ -20,6 +20,7 @@
 #define TVM_SCRIPT_PRINTER_TIR_TIR_H_
 
 #include <tvm/tir/buffer.h>
+#include <tvm/tir/expr.h>
 
 #include "../ir_docsifier.h"
 
@@ -75,6 +76,16 @@ std::vector<BufferPrintInfo> GetBufferPrintInfo(
     std::function<bool(const tir::VarNode*)> f_var_defined,
     std::unordered_set<const tir::VarNode*>* var_explicit_def,
     std::unordered_map<const tir::VarNode*, const tir::BufferNode*>* var_associated_def);
+
+ExprDoc PrintOpCall(tir::Call call, IRDocsifier p);
+
+Doc VarDef(tir::Var v, IRDocsifier p);                               // a = T.var("int32")
+Doc VarDecl(tir::Var, IRDocsifier p);                                // a: T.int32
+Doc IterVarBlockVarDef(tir::IterVar, IRDocsifier p);                 // a = T.axis.S/R(...)
+Doc IterVarLaunchThreadDef(tir::IterVar, IRDocsifier p);             // a = T.launch_thread(...)
+Doc BufferMatchBuffer(tir::Buffer, BufferPrintInfo, IRDocsifier p);  // a = T.match_buffer(...)
+Doc BufferDef(tir::Buffer, BufferPrintInfo, IRDocsifier p);          // a = T.buffer_decl(...)
+Doc BufferDecl(tir::Buffer, BufferPrintInfo, IRDocsifier p);         // a: T.Buffer()
 
 }  // namespace printer
 }  // namespace script

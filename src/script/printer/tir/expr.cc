@@ -40,8 +40,7 @@ ExprDoc PrintFloatImm(FloatImm f, IRDocsifier p) { return LiteralDoc::Float(f); 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<FloatImm>(PrintFloatImm);
 
 ExprDoc PrintCast(tir::Cast e, IRDocsifier p) {
-  return TIR(p)->Attr("cast")->Call(
-      {p->AsExprDoc(e->value), LiteralDoc::Str(runtime::DLDataType2String(e->dtype))});
+  return TIR(p)->Attr("cast")->Call({p->AsExprDoc(e->value), DType2Literal(e->dtype)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Cast>(PrintCast);
 
@@ -96,10 +95,8 @@ ExprDoc PrintLet(tir::Let e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Let>(PrintLet);
 
 ExprDoc PrintCall(tir::Call e, IRDocsifier p) {
-  if (const auto* op = e->op.as<OpNode>()) {
-    Array<ExprDoc> args{LiteralDoc::Str(op->name)};
-    args = Concat(args, AsExprDocArray(e->args, p));
-    return TIR(p)->Attr("call")->Call(args);
+  if (e->op->IsInstance<OpNode>()) {
+    return PrintOpCall(e, p);
   } else {
     const auto* op_gvar = e->op.as<GlobalVarNode>();
     ICHECK(op_gvar != nullptr);
