@@ -16,9 +16,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from distutils.log import error
 import torch
 import tvm
-from typing import List, Union
+from typing import List, Union, Callable
 import torch.utils.dlpack
 
 class TVMScriptModule(torch.nn.Module):
@@ -40,13 +41,12 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         super().__init__()
         libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
         torch.classes.load_library(libpt_path)
-
+        
         if device == None:
             runtime_module = tvm.build(ir_module)
         elif device == "cuda":
-            # Cuda not supported yet
-            return
-        
+            raise Exception("Cuda not supported yet")
+
         func = tvm.get_global_func("tvmtorch.save_runtime_mod")
         func(runtime_module)
 
@@ -58,7 +58,14 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         
 
 
-def as_torch(device : str = None):
+
+def as_torch(device : str = None,):
     def inner(func: tvm.ir.module.IRModule):
-        return TVMScriptModuleWithCxx(func, device)
+        if isinstance(func, tvm.ir.module.IRModule) or isinstance(func, tvm.tir.function.PrimFunc):
+            return TVMScriptModuleWithCxx(func, device)
+        elif isinstance(func, Callable):
+            def func_get_param(*args, **kargs):
+                return TVMScriptModuleWithCxx(func(*args, **kargs), device)
+            return func_get_param
+        
     return inner
