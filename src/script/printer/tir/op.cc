@@ -48,39 +48,12 @@ ExprDoc PrintOpCall(tir::Call call, IRDocsifier p) {
   }
 }
 
-#define TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC(name, op_kind)                             \
-  TVM_REGISTER_OP("tir." #name)                                                          \
-      .set_attr<FTVMScriptOpSugar>(                                                      \
-          kFTVMScriptOpSugarKey, [](tir::Call call, IRDocsifier p) -> ExprDoc {          \
-            ExprDoc a = p->AsExprDoc(call->args[0]);                                     \
-            ExprDoc b = p->AsExprDoc(call->args[1]);                                     \
-            return OperationDoc(CONCAT_STR(OperationDocNode::Kind::, #op_kind), {a, b}); \
-          })
-
 #define TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT(name)                                                 \
   TVM_REGISTER_OP("tir." #name)                                                               \
       .set_attr<FTVMScriptOpSugar>(kFTVMScriptOpSugarKey, [](tir::Call call, IRDocsifier p) { \
-        return TIR(p)->Attr("add")->Call(AsExprDocArray(call->args, p));                      \
+        return TIR(p)->Attr(#name)->Call(AsExprDocArray(call->args, p));                      \
       })
 
-TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("add", kAdd);
-TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("sub", kSub);
-TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("mul", kMul);
-TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("floordiv", kFloorDiv);
-TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("floormod", kFloorMod);
-
-// TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("pow", kMul);
-// TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("abs", kMul);
-// TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("min_value", kMul);
-// TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("max_value", kMul);
-// TVM_SCRIPT_TIR_BIN_OP_SUGAR_AS_OP_DOC("pow", kMul);
-
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("bitwise_not");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("fmod");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("floor");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("ceil");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("round");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("nearbyint");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("trunc");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("exp");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("exp2");
@@ -111,15 +84,6 @@ TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("nextafter");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("hypot");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("copysign");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("ldexp");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("isnan");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("isfinite");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("isinf");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("floor");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("ceil");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("round");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("nearbyint");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("trunc");
-TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("_cast");
 
 }  // namespace printer
 }  // namespace script
