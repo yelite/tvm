@@ -53,7 +53,7 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         self.engine = torch.classes.tvm_torch.TVMScriptRuntime()
         
 
-    def forward(self, torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
+    def forward(self, *torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
         return self.engine.forward(torch_inputs)
         
 

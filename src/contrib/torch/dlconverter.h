@@ -122,7 +122,11 @@ DLDataType GetDLDataType(const at::Tensor& t) {
   return dtype;
 }
 
-
+/*!
+* \brief Convert PyTorch tensor to DLPack tensor.
+*
+* \param src The PyTorch tensor datastructure
+*/
 DLManagedTensor* ToDLPack(const at::Tensor& src) {
     ATenDLMTensor* atDLMTensor(new ATenDLMTensor);
     atDLMTensor->handle = src;
