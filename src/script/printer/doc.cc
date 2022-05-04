@@ -199,6 +199,19 @@ TVM_REGISTER_GLOBAL("script.AssignDoc")
       return AssignDoc(lhs, rhs, annotation);
     });
 
+IfDoc::IfDoc(ExprDoc predicate, Array<StmtDoc> then_branch, Array<StmtDoc> else_branch) {
+  ObjectPtr<IfDocNode> n = make_object<IfDocNode>();
+  n->predicate = predicate;
+  n->then_branch = then_branch;
+  n->else_branch = else_branch;
+  this->data_ = n;
+}
+TVM_REGISTER_NODE_TYPE(IfDocNode);
+TVM_REGISTER_GLOBAL("script.IfDoc")
+    .set_body_typed([](ExprDoc predicate, Array<StmtDoc> then_branch, Array<StmtDoc> else_branch) {
+      return IfDoc(predicate, then_branch, else_branch);
+    });
+
 ForDoc::ForDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body) {
   ObjectPtr<ForDocNode> n = make_object<ForDocNode>();
   n->lhs = lhs;
@@ -215,6 +228,13 @@ TVM_REGISTER_GLOBAL("script.ForDoc")
 ScopeDoc::ScopeDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body) {
   ObjectPtr<ScopeDocNode> n = make_object<ScopeDocNode>();
   n->lhs = lhs;
+  n->rhs = rhs;
+  n->body = body;
+  this->data_ = n;
+}
+ScopeDoc::ScopeDoc(ExprDoc rhs, Array<StmtDoc> body) {
+  ObjectPtr<ScopeDocNode> n = make_object<ScopeDocNode>();
+  n->lhs = NullOpt;
   n->rhs = rhs;
   n->body = body;
   this->data_ = n;

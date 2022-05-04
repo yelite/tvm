@@ -56,6 +56,18 @@ class TIRFrame : public Frame {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRFrame, Frame, TIRFrameNode);
 };
 
+class TIRGeneralFrameNode : public TIRFrameNode {
+ public:
+  static constexpr const char* _type_key = "script.TIRGeneralFrame";
+  TVM_DECLARE_BASE_OBJECT_INFO(TIRGeneralFrameNode, FrameNode);
+};
+
+class TIRGeneralFrame : public TIRFrame {
+ public:
+  using TIRFrame::TIRFrame;
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRGeneralFrame, TIRFrame, TIRGeneralFrameNode);
+};
+
 struct BufferPrintInfo {
   tir::Buffer buffer;
   Array<PrimExpr> shape;

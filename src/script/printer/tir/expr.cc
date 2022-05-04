@@ -111,7 +111,7 @@ ExprDoc PrintShuffle(tir::Shuffle e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Shuffle>(PrintShuffle);
 
 ExprDoc PrintCommReducer(tir::CommReducer e, IRDocsifier p) {
-  TIRFrame frame(p->sym);
+  TIRGeneralFrame frame(p->sym);
   WithCtx with_frame = p->WithFrame(frame);
 
   Array<IdDoc> reducer_args;

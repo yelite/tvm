@@ -49,6 +49,8 @@ class DocPrinter {
   virtual void PrintTypedDoc(const StmtBlockDoc& doc) = 0;
   virtual void PrintTypedDoc(const ExprStmtDoc& doc) = 0;
   virtual void PrintTypedDoc(const ScopeDoc& doc) = 0;
+  virtual void PrintTypedDoc(const IfDoc& doc) = 0;
+  virtual void PrintTypedDoc(const WhileDoc& doc) = 0;
   virtual void PrintTypedDoc(const ForDoc& doc) = 0;
   virtual void PrintTypedDoc(const AssignDoc& doc) = 0;
   virtual void PrintTypedDoc(const FunctionDoc& doc) = 0;
@@ -85,6 +87,8 @@ class PythonDocPrinter : public DocPrinter {
   void PrintTypedDoc(const StmtBlockDoc& doc) final;
   void PrintTypedDoc(const ExprStmtDoc& doc) final;
   void PrintTypedDoc(const ScopeDoc& doc) final;
+  void PrintTypedDoc(const IfDoc& doc) final;
+  void PrintTypedDoc(const WhileDoc& doc) final;
   void PrintTypedDoc(const ForDoc& doc) final;
   void PrintTypedDoc(const AssignDoc& doc) final;
   void PrintTypedDoc(const FunctionDoc& doc) final;

@@ -271,11 +271,16 @@ class OperationDocNode : public ExprDocNode {
  public:
   enum class Kind : int32_t {
     kUndefined = 0,
-    kAdd = 1,
-    kSub = 2,
-    kMul = 3,
-    kFloorDiv = 4,
-    kFloorMod = 5,
+    kUnary = 1,
+    kBinary = 100,
+    kAdd = 101,
+    kSub = 102,
+    kMul = 103,
+    kFloorDiv = 104,
+    kFloorMod = 105,
+
+    kSpecial = 1000,
+    kAssert = 1001,    
   };
 
   Kind kind;
@@ -411,6 +416,50 @@ class AssignDoc : public StmtDoc {
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(AssignDoc, StmtDoc, AssignDocNode);
 };
 
+class IfDocNode : public StmtDocNode {
+ public:
+  ExprDoc predicate;
+  Array<StmtDoc> then_branch;
+  Array<StmtDoc> else_branch;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("predicate", &predicate);
+    v->Visit("then_branch", &then_branch);
+    v->Visit("else_branch", &else_branch);
+  }
+
+  static constexpr const char* _type_key = "script.IfDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(IfDocNode, StmtDocNode);
+};
+
+class IfDoc : public StmtDoc {
+ public:
+  explicit IfDoc(ExprDoc predicate, Array<StmtDoc> then_branch, Array<StmtDoc> else_branch);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(IfDoc, StmtDoc, IfDocNode);
+};
+
+class WhileDocNode : public StmtDocNode {
+ public:
+  ExprDoc predicate;
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("predicate", &predicate);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.WhileDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(WhileDocNode, StmtDocNode);
+};
+
+class WhileDoc : public StmtDoc {
+ public:
+  explicit WhileDoc(ExprDoc predicate, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(WhileDoc, StmtDoc, WhileDocNode);
+};
+
 class ForDocNode : public StmtDocNode {
  public:
   ExprDoc lhs{nullptr};
@@ -454,6 +503,7 @@ class ScopeDocNode : public StmtDocNode {
 class ScopeDoc : public StmtDoc {
  public:
   explicit ScopeDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body);
+  explicit ScopeDoc(ExprDoc rhs, Array<StmtDoc> body);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
 };
 

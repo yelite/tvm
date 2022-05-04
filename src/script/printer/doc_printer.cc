@@ -222,6 +222,36 @@ void PythonDocPrinter::PrintTypedDoc(const ScopeDoc& doc) {
   PrintWithIncreasedIndent(doc->body);
 }
 
+void PythonDocPrinter::PrintTypedDoc(const IfDoc& doc) {
+  output_ << "if ";
+  PrintDoc(doc->predicate);
+  output_ << ":";
+
+  if (doc->then_branch.empty()) {
+    IncreaseIndent();
+    NewLine();
+    output_ << "pass";
+    DecreaseIndent();
+  } else {
+    PrintWithIncreasedIndent(doc->then_branch);
+  }
+
+  if (!doc->else_branch.empty()) {
+    output_ << "else:";
+    NewLine();
+    PrintWithIncreasedIndent(doc->else_branch);
+  }
+}
+
+void PythonDocPrinter::PrintTypedDoc(const WhileDoc& doc) {
+  output_ << "while ";
+  PrintDoc(doc->predicate);
+  output_ << ":";
+  NewLine();
+
+  PrintWithIncreasedIndent(doc->body);
+}
+
 void PythonDocPrinter::PrintTypedDoc(const ForDoc& doc) {
   output_ << "for ";
   PrintDoc(doc->lhs);
