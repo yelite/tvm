@@ -25,6 +25,8 @@
 #include <tvm/tir/expr.h>
 #include <tvm/tir/expr_functor.h>
 #include <tvm/tir/op.h>
+#include <tvm/ir/expr.h>
+#include <tvm/runtime/container/optional.h>
 
 #include "../util.h"
 #include "./utils.h"
@@ -37,9 +39,9 @@ class FreeVariableVisitor : public tir::ExprVisitor {
  public:
   SymbolTableNode* sym;
 
-  std::unordered_set<ObjectRef> free_vars;
+  std::unordered_set<ObjectRef, ObjectPtrHash, ObjectPtrEqual> free_vars;
 
-  using tir::ExprVisitor::ExprVisitor;
+  explicit FreeVariableVisitor(SymbolTableNode* sym) : sym(sym){};
 
  protected:
   void VisitExpr_(const tir::VarNode* op) override {
@@ -64,10 +66,33 @@ class FreeVariableVisitor : public tir::ExprVisitor {
   };
 };
 
-Array<ObjectRef> GetFreeVariablesFromExpr(const PrimExpr& expr) {
-  FreeVariableVisitor visitor;
-  visitor.VisitExpr(expr);
+Array<ObjectRef> GetFreeVariablesFromExpr(const PrimExpr& expr, const SymbolTable& sym) {
+  FreeVariableVisitor visitor{sym.get()};
+  visitor(expr);
   return {visitor.free_vars.begin(), visitor.free_vars.end()};
+}
+
+Array<StmtDoc> GetFreeVariableDefinitions(const PrimExpr& expr, IRDocsifier p) {
+  Array<StmtDoc> defs;
+  Array<ObjectRef> free_vars = GetFreeVariablesFromExpr(expr, p->sym);
+  for (const ObjectRef& free_var : free_vars) {
+    if (const auto* var_node = free_var.as<tir::VarNode>()) {
+      tir::Var var = GetRef<tir::Var>(var_node);
+      IdDoc var_doc =
+          p->GetFrame<TIRFrame>().value()->DefByName(var, p->sym->GetUniqueName(var->name_hint));
+      AssignDoc var_def =
+          AssignDoc(var_doc, TIR(p)->Attr("var")->Call({DType2Literal(var->dtype)}), NullOpt);
+      defs.push_back(var_def);
+    } else if (const auto* buf_node = free_var.as<tir::BufferNode>()) {
+      tir::Buffer buf = GetRef<tir::Buffer>(buf_node);
+      // TODO: Print T.decl_buffer
+      throw;
+    } else {
+      LOG(FATAL) << "Unknown variable type " << Object::TypeIndex2Key(free_var->type_index());
+      throw;
+    }
+  }
+  return defs;
 }
 
 Array<StmtDoc> AsStmtDocArray(const ObjectRef& obj, IRDocsifier p) {
