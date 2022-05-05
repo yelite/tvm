@@ -227,11 +227,24 @@ StmtDoc PrintAllocateConst(tir::AllocateConst stmt, IRDocsifier p) {}
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AllocateConst>(PrintAllocateConst);
 
-StmtDoc PrintAttrStmt(tir::AttrStmt stmt, IRDocsifier p) {
+StmtBlockDoc PrintAttrStmt(tir::AttrStmt stmt, IRDocsifier p) {
   if (stmt->node->IsInstance<tir::BufferNode>() && stmt->attr_key == "realize_scope" &&
       stmt->body->IsInstance<tir::BufferRealizeNode>()) {
     // BufferRealize
     const auto* realize = Downcast<tir::BufferRealize>(stmt->body).get();
+    ICHECK(realize->buffer.same_as(stmt->node));
+
+    Array<ExprDoc> realize_args;
+    realize_args.push_back(p->AsExprDoc(realize->buffer));
+    realize_args.push_back(ListDoc(AsExprDocArray(realize->bounds, p)));
+    realize_args.push_back(p->AsExprDoc(stmt->value));
+    if (!tir::is_one(realize->condition)) {
+      realize_args.push_back(p->AsExprDoc(realize->condition));
+    }
+
+    Array<StmtDoc> body = AsStmtDocArray(realize->body, p);
+
+    return AsConciseScopedStmts(TIR(p)->Attr("realize")->Call(realize_args), body, p);
   } else if (stmt->node->IsInstance<tir::IterVarNode>() &&
              (stmt->attr_key == "thread_extent" || stmt->attr_key == "virtual_thread")) {
     // IterVar
@@ -244,8 +257,8 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AttrStmt>(PrintAttr
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::BufferRealize>([](tir::BufferRealize stmt, IRDocsifier p) -> Doc {
-      LOG(FATAL)
-          << "TVM Script Printer Internal Error: All the BufferRealize should be folded with Attr";
+      LOG(FATAL) << "TVM Script Printer Internal Error: All the BufferRealize should be folded "
+                    "with Attr";
       throw;
     });
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
