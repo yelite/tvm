@@ -225,7 +225,7 @@ TVM_REGISTER_GLOBAL("script.ForDoc")
       return ForDoc(lhs, rhs, body);
     });
 
-ScopeDoc::ScopeDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body) {
+ScopeDoc::ScopeDoc(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body) {
   ObjectPtr<ScopeDocNode> n = make_object<ScopeDocNode>();
   n->lhs = lhs;
   n->rhs = rhs;

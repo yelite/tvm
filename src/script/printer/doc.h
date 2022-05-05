@@ -502,7 +502,7 @@ class ScopeDocNode : public StmtDocNode {
 
 class ScopeDoc : public StmtDoc {
  public:
-  explicit ScopeDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body);
+  explicit ScopeDoc(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body);
   explicit ScopeDoc(ExprDoc rhs, Array<StmtDoc> body);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
 };

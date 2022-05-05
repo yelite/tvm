@@ -19,14 +19,14 @@
 
 #include "tvm/tir/stmt.h"
 
+#include <tvm/ir/expr.h>
 #include <tvm/node/functor.h>
 #include <tvm/runtime/container/array.h>
+#include <tvm/runtime/container/optional.h>
 #include <tvm/runtime/data_type.h>
 #include <tvm/tir/expr.h>
 #include <tvm/tir/expr_functor.h>
 #include <tvm/tir/op.h>
-#include <tvm/ir/expr.h>
-#include <tvm/runtime/container/optional.h>
 
 #include "../util.h"
 #include "./utils.h"
@@ -108,6 +108,31 @@ Array<StmtDoc> AsStmtDocArray(const ObjectRef& obj, IRDocsifier p) {
   }
 }
 
+StmtBlockDoc AsConciseScopedStmts(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body,
+                                  Optional<StmtDoc> concise_stmt_override, IRDocsifier p) {
+  if (p->GetFrame<TIRFrame>().value()->allow_concise_scoping_) {
+    StmtDoc first_doc = ExprStmtDoc(rhs);
+    if (concise_stmt_override) {
+      first_doc = concise_stmt_override.value();
+    } else if (lhs) {
+      first_doc = AssignDoc(lhs.value(), rhs, NullOpt);
+    }
+
+    return StmtBlockDoc(runtime::Concat({first_doc}, body));
+  } else {
+    return StmtBlockDoc({ScopeDoc(lhs, rhs, body)});
+  }
+}
+
+StmtBlockDoc AsConciseScopedStmts(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body,
+                                  IRDocsifier p) {
+  return AsConciseScopedStmts(lhs, rhs, body, NullOpt, p);
+}
+
+StmtBlockDoc AsConciseScopedStmts(ExprDoc rhs, Array<StmtDoc> body, IRDocsifier p) {
+  return AsConciseScopedStmts(NullOpt, rhs, body, NullOpt, p);
+}
+
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::SeqStmt>([](tir::SeqStmt stmt, IRDocsifier p) {
       Array<StmtDoc> result;
@@ -123,14 +148,10 @@ StmtBlockDoc PrintAssertStmt(tir::AssertStmt stmt, IRDocsifier p) {
   ExprDoc message_expr = p->AsExprDoc(stmt->message);
   Array<StmtDoc> body = AsStmtDocArray(stmt->body, p);
 
-  if (p->GetFrame<TIRFrame>().value()->allow_concise_scoping_) {
-    ExprDoc assert_call_expr = TIR(p)->Attr("Assert")->Call({condition_expr, message_expr});
-    return StmtBlockDoc({ScopeDoc{assert_call_expr, body}});
-  } else {
-    StmtDoc assert_stmt =
-        ExprStmtDoc(OperationDoc(OperationDocNode::Kind::kAssert, {condition_expr, message_expr}));
-    return StmtBlockDoc(runtime::Concat({assert_stmt}, body));
-  }
+  ExprDoc assert_call_expr = TIR(p)->Attr("Assert")->Call({condition_expr, message_expr});
+  StmtDoc assert_stmt =
+      ExprStmtDoc(OperationDoc(OperationDocNode::Kind::kAssert, {condition_expr, message_expr}));
+  return AsConciseScopedStmts(NullOpt, assert_call_expr, body, assert_stmt, p);
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AssertStmt>(PrintAssertStmt);
@@ -182,23 +203,18 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
 
 StmtBlockDoc PrintLetStmt(tir::LetStmt stmt, IRDocsifier p) {
   auto current_frame = p->GetFrame<TIRFrame>().value();
+  TIRGeneralFrame new_frame(p->sym);
+  WithCtx with_frame = p->WithFrame(new_frame);
+
   // TODO: PrintNonHeaderBufferDeclarations
+  Array<StmtDoc> body = AsStmtDocArray(stmt->body, p);
 
-  if (current_frame->allow_concise_scoping_) {
-    IdDoc var_doc =
-        current_frame->DefByName(stmt->var, p->sym->GetUniqueName(stmt->var->name_hint));
-    AssignDoc var_def =
-        AssignDoc(var_doc, p->AsExprDoc(stmt->value), p->AsExprDoc(GetType(stmt->var)));
-    return StmtBlockDoc(runtime::Concat({var_def}, AsStmtDocArray(stmt->body, p)));
-  } else {
-    TIRGeneralFrame new_frame(p->sym);
-    WithCtx with_frame = p->WithFrame(new_frame);
-
-    IdDoc var_doc = new_frame->DefByName(stmt->var, p->sym->GetUniqueName(stmt->var->name_hint));
-    ExprDoc let_call =
-        TIR(p)->Attr("let")->Call({LiteralDoc::Str(var_doc->name), p->AsExprDoc(stmt->value)});
-    return StmtBlockDoc({ScopeDoc(let_call, AsStmtDocArray(stmt->body, p))});
-  }
+  IdDoc var_doc = new_frame->DefByName(stmt->var, p->sym->GetUniqueName(stmt->var->name_hint));
+  AssignDoc var_def =
+      AssignDoc(var_doc, p->AsExprDoc(stmt->value), p->AsExprDoc(GetType(stmt->var)));
+  ExprDoc let_call =
+      TIR(p)->Attr("let")->Call({LiteralDoc::Str(var_doc->name), p->AsExprDoc(stmt->value)});
+  return AsConciseScopedStmts(NullOpt, let_call, body, var_def, p);
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::LetStmt>(PrintLetStmt);
@@ -211,7 +227,18 @@ StmtDoc PrintAllocateConst(tir::AllocateConst stmt, IRDocsifier p) {}
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AllocateConst>(PrintAllocateConst);
 
-StmtDoc PrintAttrStmt(tir::AttrStmt stmt, IRDocsifier p) {}
+StmtDoc PrintAttrStmt(tir::AttrStmt stmt, IRDocsifier p) {
+  if (stmt->node->IsInstance<tir::BufferNode>() && stmt->attr_key == "realize_scope" &&
+      stmt->body->IsInstance<tir::BufferRealizeNode>()) {
+    // BufferRealize
+    const auto* realize = Downcast<tir::BufferRealize>(stmt->body).get();
+  } else if (stmt->node->IsInstance<tir::IterVarNode>() &&
+             (stmt->attr_key == "thread_extent" || stmt->attr_key == "virtual_thread")) {
+    // IterVar
+  } else {
+    // General Form
+  }
+}
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AttrStmt>(PrintAttrStmt);
 
