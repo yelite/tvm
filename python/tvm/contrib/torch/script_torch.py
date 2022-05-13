@@ -63,11 +63,23 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
             return self.engine_cpu.forward(torch_inputs)
         
 
+class TVMScriptModule(torch.nn.Module):
+    def __init__(self, module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc]):
+        super().__init__()
+        self.runtime_mod = tvm.build(module)
 
+
+    def forward(self, *torch_inputs : List[torch.Tensor]) -> torch.Tensor :
+        tensor_inputs = [tvm.nd.from_dlpack(torch.utils.dlpack.to_dlpack(i)) for i in torch_inputs]
+
+        self.runtime_mod(*tensor_inputs)
+        torch_output = tensor_inputs[-1]
+        torch_output = torch.utils.dlpack.from_dlpack(torch_output.to_dlpack())
+        return torch_output
 
 def as_torch(func: tvm.ir.module.IRModule):
     if isinstance(func, tvm.ir.module.IRModule) or isinstance(func, tvm.tir.function.PrimFunc):
-        return TVMScriptModuleWithCxx(func)
+        return TVMScriptModule(func)
     elif isinstance(func, Callable):
         def func_get_param(*args, **kargs):
             return TVMScriptModuleWithCxx(func(*args, **kargs))

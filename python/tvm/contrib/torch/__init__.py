@@ -51,6 +51,8 @@ PyTorchTVMModule = pytorch_tvm.PyTorchTVMModule
 compile = pytorch_tvm.compile
 
 from . import script_torch
+from . import pytorch_tuning
 
 as_torch = script_torch.as_torch
 TVMScriptModuleWithCxx = script_torch.TVMScriptModuleWithCxx
+build_rt_mod = pytorch_tuning.build_rt_mod
