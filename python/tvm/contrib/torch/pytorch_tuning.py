@@ -5,6 +5,7 @@ from tvm import relay
 import functools
 from tvm.contrib import graph_executor
 import torch.utils.dlpack
+from .script_torch import TVMScriptModuleWithCxx
 from tvm.meta_schedule import TuneConfig, tune_tir
 from tvm.meta_schedule.tune import tune_extracted_tasks, tune_relay
 import tempfile
@@ -51,6 +52,8 @@ def build_rt_mod(func, example_inputs, tuning_config):
     mod, params = relay.frontend.from_pytorch(jit_mod, shape_list)
     dev = tvm.cpu(0)
     mod_after_tuning = tuning_relay(mod, params, tuning_config)
-    rt_mod = graph_executor.GraphModule(mod_after_tuning["default"](dev))
-
-    return RelayRTModule(rt_mod)
+    rt_mod = mod_after_tuning["default"](dev)
+    
+    # rt_mod = graph_executor.GraphModule(rt_mod)
+    # return RelayRTModule(rt_mod)
+    return TVMScriptModuleWithCxx(rt_mod)
