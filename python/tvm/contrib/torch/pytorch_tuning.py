@@ -27,6 +27,7 @@ def tuning_relay(mod : tvm.ir.module.IRModule, params : Dict, config : TuneConfi
         )
         return rt_mod1
 
+## The Python Implement, which is unused now
 class RelayRTModule(torch.nn.Module):
         def __init__(self, rt_mod : tvm.runtime.Module):
             super().__init__()

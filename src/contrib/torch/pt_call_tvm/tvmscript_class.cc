@@ -26,9 +26,6 @@
 #include <string>
 #include <vector>
 
-// #include "../utils.h"
-// #include "../dlconverter.h"
-
 namespace tvm {
 namespace contrib {
 
@@ -111,43 +108,25 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
         set_input.CallPacked(
           tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 2), nullptr);
       }
-      
-
-      LOG(INFO) << "input create";
 
       rt_func.CallPacked(
         tvm::runtime::TVMArgs(NULL, NULL, 0), nullptr);
-
-      LOG(INFO) << "run create";
-
 
       std::vector<TVMValue> tvm_values(input_length);
       std::vector<int> tvm_type_codes(input_length);
       tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
       setter(0, 0);
       tvm::runtime::TVMRetValue ret;
-      // setter(1, tensor);
 
-      LOG(INFO) << "get output";
       get_output.CallPacked(
         tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), &ret);
 
-      
-      LOG(INFO) << "run after";
       tvm::runtime::NDArray results = get_output(0);
 
       
       at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
 
-      // LOG(INFO) << "from dlpack";
-      // // ret_tensors.push_back(tensor);
       return atTensor;
-
-      // for (int k = 0; k < input_length; ++k) {
-      //   tensors[k]->deleter(tensors[k]);
-      //   // ret_tensors[k]->deleter(ret_tensors[k]);
-      // }
-  
   }
 
 

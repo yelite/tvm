@@ -31,12 +31,12 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
         torch.classes.load_library(libpt_path)
         self.engine_cpu = None
         self.engine_cuda = None
-        print(type(module))
+
         if isinstance(module, (tvm.ir.module.IRModule, tvm.tir.function.PrimFunc)):
             self.ir_module = module
             
         elif isinstance(module, tvm.runtime.Module):
-            print("here")
+
             self.__set_relay_module(module)
             
     def __set_relay_module(self, runtime_module):

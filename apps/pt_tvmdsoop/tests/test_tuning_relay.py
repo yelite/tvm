@@ -48,8 +48,6 @@ def test_matmul_tuning_relay():
     torch_answer = torch.matmul(x, w).numpy()
     tvm_answer = rt_mod(x, w).numpy()
     
-    # print(tvm_answer)
-    # tvm_answer = np._from_dlpack(tvm_answer) 
     
     tvm.testing.assert_allclose(torch_answer, tvm_answer, atol=1e-5, rtol=1e-5)
 
