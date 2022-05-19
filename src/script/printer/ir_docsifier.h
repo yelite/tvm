@@ -76,6 +76,13 @@ class IRDocsifierNode : public Object {
   template <typename FrameType>
   Optional<FrameType> GetFrame() const;
 
+  /*!
+   * Get an array of frames of `FrameType`. The first element in the array is the latest frame
+   * added.
+   */
+  template <typename FrameType>
+  Array<FrameType> GetFrames() const;
+
  private:
   Doc AsDocImpl(const ObjectRef& obj) const;
 };
@@ -99,6 +106,17 @@ Optional<FrameType> IRDocsifierNode::GetFrame() const {
     }
   }
   return NullOpt;
+}
+
+template <typename FrameType>
+Array<FrameType> IRDocsifierNode::GetFrames() const {
+  Array<FrameType> result;
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
+    if ((*it)->IsInstance<FrameType>()) {
+      result.push_back(*it);
+    }
+  }
+  return result;
 }
 
 inline Doc IRDocsifierNode::AsDocImpl(const ObjectRef& obj) const {

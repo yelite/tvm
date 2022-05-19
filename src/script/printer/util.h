@@ -20,6 +20,7 @@
 #define TVM_SCRIPT_PRINTER_UTIL_H_
 
 #include "./ir_docsifier.h"
+#include "doc.h"
 
 namespace tvm {
 namespace script {
@@ -34,9 +35,22 @@ Array<DocType> AsDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_doc
   return result;
 }
 
-template <typename NodeType>
-Array<ExprDoc> AsExprDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_docsifier) {
+template <typename RefType>
+Array<ExprDoc> AsExprDocArray(const Array<RefType>& refs, const IRDocsifier& ir_docsifier) {
   return AsDocArray<ExprDoc>(refs, ir_docsifier);
+}
+
+DictDoc AsDictDoc(const Map<String, ObjectRef>& dict, const IRDocsifier& ir_docsifier)
+{
+    Array<ExprDoc> keys;
+    Array<ExprDoc> values;
+
+    for (const auto& p : dict) {
+        keys.push_back(LiteralDoc::Str(p.first));
+        values.push_back(ir_docsifier->AsExprDoc(p.second));
+    }
+
+    return DictDoc(keys, values);
 }
 
 }  // namespace printer
