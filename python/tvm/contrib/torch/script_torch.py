@@ -19,31 +19,48 @@
 # under the License.
 import torch
 import tvm
-from typing import List, Union, Callable
+from typing import List, Union, Callable, Dict
 import torch.utils.dlpack 
-from tvm.target import Target
-from tvm.meta_schedule import TuneConfig, tune_tir
+from tvm.meta_schedule import TuneConfig
+import functools
+from tvm import relay
+import tempfile
+from tvm.meta_schedule.tune import tune_extracted_tasks, tune_relay
 
-class TVMScriptModuleWithCxx(torch.nn.Module):
+class TVMScriptRtModule(torch.nn.Module):
+    def __init__(self, module : tvm.runtime.Module):
+        super().__init__()
+        libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
+        torch.classes.load_library(libpt_path)
+        self.engine_cpu = None
+        self.engine_cuda = None
+        self.__set_relay_module(module)
+        
+    def __set_relay_module(self, runtime_module):
+        func = tvm.get_global_func("tvmtorch.save_runtime_mod")
+        func(runtime_module)
+
+        self.engine_cpu = torch.classes.tvm_tuning.RelayRuntime()
+        
+    def forward(self, *torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
+        if torch_inputs[0].is_cuda:
+            if self.engine_cuda is None:
+                self.__build_cuda()
+            return self.engine_cuda.forward(torch_inputs)
+        else: 
+            if self.engine_cpu is None:
+                self.__build_cpu()
+            return self.engine_cpu.forward(torch_inputs)
+
+class TVMScriptIRModule(torch.nn.Module):
     def __init__(self, module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc, tvm.contrib.graph_executor.GraphModule]):
         super().__init__()
         libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
         torch.classes.load_library(libpt_path)
         self.engine_cpu = None
         self.engine_cuda = None
+        self.ir_module = module
 
-        if isinstance(module, (tvm.ir.module.IRModule, tvm.tir.function.PrimFunc)):
-            self.ir_module = module
-            
-        elif isinstance(module, tvm.runtime.Module):
-
-            self.__set_relay_module(module)
-            
-    def __set_relay_module(self, runtime_module):
-        func = tvm.get_global_func("tvmtorch.save_runtime_mod")
-        func(runtime_module)
-
-        self.engine_cpu = torch.classes.tvm_tuning.RelayRuntime()
         
     def __save_cpu_rt_module(self, runtime_module):
         func = tvm.get_global_func("tvmtorch.save_runtime_mod")
@@ -79,24 +96,35 @@ class TVMScriptModuleWithCxx(torch.nn.Module):
             return self.engine_cpu.forward(torch_inputs)
         
 
-# class TVMScriptModule(torch.nn.Module):
-#     def __init__(self, module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc]):
-#         super().__init__()
-#         self.runtime_mod = tvm.build(module)
-
-
-#     def forward(self, *torch_inputs : List[torch.Tensor]) -> torch.Tensor :
-#         tensor_inputs = [tvm.nd.from_dlpack(torch.utils.dlpack.to_dlpack(i)) for i in torch_inputs]
-
-#         self.runtime_mod(*tensor_inputs)
-#         torch_output = tensor_inputs[-1]
-#         torch_output = torch.utils.dlpack.from_dlpack(torch_output.to_dlpack())
-#         return torch_output
-
 def as_torch(func: tvm.ir.module.IRModule):
     if isinstance(func, tvm.ir.module.IRModule) or isinstance(func, tvm.tir.function.PrimFunc):
-        return TVMScriptModuleWithCxx(func)
+        return TVMScriptIRModule(func)
     elif isinstance(func, Callable):
         def func_get_param(*args, **kargs):
-            return TVMScriptModuleWithCxx(func(*args, **kargs))
+            return TVMScriptIRModule(func(*args, **kargs))
         return func_get_param
+
+@functools.lru_cache(None)
+def llvm_target():
+    return "llvm -num-cores 16"
+
+def tuning_relay(mod : tvm.ir.module.IRModule, params : Dict, config : TuneConfig):
+    with tempfile.TemporaryDirectory() as work_dir:
+        rt_mod1: tvm.runtime.Module = tune_relay(
+            mod=mod,
+            params=params,
+            target=llvm_target(),
+            config=config,
+            work_dir=work_dir,
+        )
+        return rt_mod1
+          
+def build_rt_mod(func, example_inputs, tuning_config):
+    jit_mod = torch.jit.trace(func, example_inputs)
+    shape_list = [(f"inp_{idx}", i.shape) for idx, i in enumerate(example_inputs)]
+    mod, params = relay.frontend.from_pytorch(jit_mod, shape_list)
+    dev = tvm.cpu(0)
+    mod_after_tuning = tuning_relay(mod, params, tuning_config)
+    rt_mod = mod_after_tuning["default"](dev)
+    
+    return TVMScriptRtModule(rt_mod)
