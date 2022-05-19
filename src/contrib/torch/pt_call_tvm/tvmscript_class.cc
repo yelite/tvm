@@ -87,7 +87,6 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
 
   at::Tensor forward(const c10::List<at::Tensor>& inputs) {
 
-      LOG(INFO) << "forward works ";
       int input_length = inputs.size();
 
       std::vector<DLManagedTensor*> tensors;
