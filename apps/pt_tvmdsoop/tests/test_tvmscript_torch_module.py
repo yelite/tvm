@@ -140,4 +140,4 @@ if __name__ == "__main__":
     test_tvmscript_torch_matmul()
     test_tvmscript_torch_decorator()
     test_torch_with_tvmscirpt()
-    test_tvmscript_torch_decorator_cuda()
+    # test_tvmscript_torch_decorator_cuda()

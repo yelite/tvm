@@ -32,9 +32,9 @@ def matmul(x, w):
 def test_matmul_tuning_relay():
     config = TuneConfig(
                 strategy="evolutionary",
-                num_trials_per_iter=8,
-                max_trials_per_task=8,
-                max_trials_global=8,
+                num_trials_per_iter=4,
+                max_trials_per_task=4,
+                max_trials_global=4,
                 search_strategy_config={
                     "genetic_num_iters": 10,
                 },
@@ -46,7 +46,10 @@ def test_matmul_tuning_relay():
     rt_mod = build_rt_mod(matmul, example_inputs, config)
 
     torch_answer = torch.matmul(x, w).numpy()
-    tvm_answer = rt_mod(x, w)[0].numpy()
+    tvm_answer = rt_mod(x, w).numpy()
+    
+    # print(tvm_answer)
+    # tvm_answer = np._from_dlpack(tvm_answer) 
     
     tvm.testing.assert_allclose(torch_answer, tvm_answer, atol=1e-5, rtol=1e-5)
 

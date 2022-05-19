@@ -28,9 +28,9 @@ def tuning_relay(mod : tvm.ir.module.IRModule, params : Dict, config : TuneConfi
         return rt_mod1
 
 class RelayRTModule(torch.nn.Module):
-        def __init__(self, rt_mod : graph_executor.GraphModule):
+        def __init__(self, rt_mod : tvm.runtime.Module):
             super().__init__()
-            self.rt_mod = rt_mod
+            self.rt_mod = graph_executor.GraphModule(rt_mod)
 
         @staticmethod
         def _to_torch_tensor(nd_tensor : tvm.nd.NDArray) -> torch.Tensor :
@@ -54,6 +54,4 @@ def build_rt_mod(func, example_inputs, tuning_config):
     mod_after_tuning = tuning_relay(mod, params, tuning_config)
     rt_mod = mod_after_tuning["default"](dev)
     
-    # rt_mod = graph_executor.GraphModule(rt_mod)
-    # return RelayRTModule(rt_mod)
     return TVMScriptModuleWithCxx(rt_mod)

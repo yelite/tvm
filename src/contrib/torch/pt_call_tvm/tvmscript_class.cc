@@ -21,13 +21,13 @@
 #include <torch/script.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/runtime/module.h>
-
+#include <ATen/DLConvertor.h>
 #include <map>
 #include <string>
 #include <vector>
 
-#include "../utils.h"
-#include "../dlconverter.h"
+// #include "../utils.h"
+// #include "../dlconverter.h"
 
 namespace tvm {
 namespace contrib {
@@ -44,7 +44,6 @@ struct ThreadLocalStore {
 class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
  public:
   TVMScriptRuntimeClass() {
-
     mod_ = ThreadLocalStore::ThreadLocal() -> mod;
   }
 
@@ -55,7 +54,7 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
 
     std::vector<DLManagedTensor*> tensors;
 
-    for (int i = 0; i < input_length; ++i) tensors.push_back(ToDLPack(inputs[i]));
+    for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
 
     tvm::runtime::PackedFunc rt_func = mod_.GetFunction("__tvm_main__");
 
@@ -68,7 +67,7 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
 
     rt_func.CallPacked(
         tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
-    
+
     for (int k = 0; k < input_length; ++k) {
       // LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
       tensors[k]->deleter(tensors[k]);
@@ -82,6 +81,81 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
 
 };
 
+class RelayRuntimeClass : public torch::jit::CustomClassHolder {
+ public:
+  RelayRuntimeClass() {
+
+    mod_ = ThreadLocalStore::ThreadLocal() -> mod;
+  }
+
+  at::Tensor forward(const c10::List<at::Tensor>& inputs) {
+
+      LOG(INFO) << "forward works ";
+      int input_length = inputs.size();
+
+      std::vector<DLManagedTensor*> tensors;
+
+      for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
+
+      tvm::runtime::PackedFunc rt_func = mod_.GetFunction("run");
+      tvm::runtime::PackedFunc set_input = mod_.GetFunction("set_input");
+      tvm::runtime::PackedFunc get_output = mod_.GetFunction("get_output");
+
+      
+      for (int k = 0; k < input_length; ++k) {
+        std::vector<TVMValue> tvm_values(input_length);
+        std::vector<int> tvm_type_codes(input_length);
+        tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
+        setter(0, k);
+        setter(1, &tensors[k]->dl_tensor);
+        set_input.CallPacked(
+          tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 2), nullptr);
+      }
+      
+
+      LOG(INFO) << "input create";
+
+      rt_func.CallPacked(
+        tvm::runtime::TVMArgs(NULL, NULL, 0), nullptr);
+
+      LOG(INFO) << "run create";
+
+
+      std::vector<TVMValue> tvm_values(input_length);
+      std::vector<int> tvm_type_codes(input_length);
+      tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
+      setter(0, 0);
+      tvm::runtime::TVMRetValue ret;
+      // setter(1, tensor);
+
+      LOG(INFO) << "get output";
+      get_output.CallPacked(
+        tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), &ret);
+
+      
+      LOG(INFO) << "run after";
+      tvm::runtime::NDArray results = get_output(0);
+
+      
+      at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+
+      // LOG(INFO) << "from dlpack";
+      // // ret_tensors.push_back(tensor);
+      return atTensor;
+
+      // for (int k = 0; k < input_length; ++k) {
+      //   tensors[k]->deleter(tensors[k]);
+      //   // ret_tensors[k]->deleter(ret_tensors[k]);
+      // }
+  
+  }
+
+
+ private:
+
+  tvm::runtime::Module mod_;
+
+};
 
 TVM_REGISTER_GLOBAL("tvmtorch.save_runtime_mod").set_body_typed([](tvm::runtime::Module mod) {
   ThreadLocalStore::ThreadLocal()->mod = mod;
@@ -91,6 +165,12 @@ TORCH_LIBRARY(tvm_torch, m) {
   m.class_<TVMScriptRuntimeClass>("TVMScriptRuntime")
   .def(torch::init<>())
   .def("forward", &TVMScriptRuntimeClass::forward);
+}
+
+TORCH_LIBRARY(tvm_tuning, m) {
+  m.class_<RelayRuntimeClass>("RelayRuntime")
+  .def(torch::init<>())
+  .def("forward", &RelayRuntimeClass::forward);
 }
 
 }
