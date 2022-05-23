@@ -52,3 +52,5 @@ def test_roundtrippable_basic_fragment():
         B[vi] = A[vi] + T.float32(1)
     """
     assert to_tvmscript(buffer_store_node) == format_script(expected)
+
+test_roundtrippable_basic()
