@@ -29,7 +29,12 @@ namespace printer {
 
 ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix,
                                 std::function<ExprDoc(const PrimExpr&)> converter) const {
-  Array<ExprDoc> args;
+  return AsCall(prefix, {}, converter);
+}
+
+ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
+                                std::function<ExprDoc(const PrimExpr&)> converter) const {
+  Array<ExprDoc> args(extra_args);
   Array<String> kwargs_keys;
   Array<ExprDoc> kwargs_values;
   {

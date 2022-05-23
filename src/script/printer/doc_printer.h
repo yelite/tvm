@@ -129,7 +129,9 @@ class PythonDocPrinter : public DocPrinter {
 
   template <typename... Arg>
   void PrintTIRPrimitiveCall(const std::string& primitive, Arg... args) {
-    output_ << tir_prefix_ << "." << primitive;
+    // TODO: Replace this with configurable prefix
+    output_ << "T"
+            << "." << primitive;
     PrintJoinedElements("(", std::vector<typename std::common_type_t<Arg...>>{args...}, ", ", ")");
   }
 

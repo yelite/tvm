@@ -45,12 +45,16 @@ ExprDoc PrintCast(tir::Cast e, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Cast>(PrintCast);
 
 template <typename BinOpType>
-OperationDocNode::Kind GetBinaryOpKind() {}
+OperationDocNode::Kind GetBinaryOpKind() { throw; }
 
 template <typename BinOpType>
 ExprDoc PrintBinOp(BinOpType e, IRDocsifier p) {
   return OperationDoc(GetBinaryOpKind<BinOpType>(), {p->AsExprDoc(e->a), p->AsExprDoc(e->b)});
 }
+
+template<>
+OperationDocNode::Kind GetBinaryOpKind<tir::AddNode>() { return OperationDocNode::Kind::kAdd; }
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Add>(PrintBinOp<tir::Add>);
 
 ExprDoc PrintSelect(tir::Select e, IRDocsifier p) {
   return TIR(p)->Attr("Select")->Call(
@@ -154,6 +158,21 @@ ExprDoc PrintAny(tir::Any e, IRDocsifier p) {
   throw;
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Any>(PrintAny);
+
+ExprDoc PrintBufferRegion(tir::BufferRegion buffer_region, IRDocsifier p) {
+  Array<Doc> indices;
+
+  for (const Range& range : buffer_region->region) {
+    if (tir::is_one(range->extent)) {
+      indices.push_back(p->AsExprDoc(range->min));
+    } else {
+      indices.push_back(p->AsExprDoc(range));
+    }
+  }
+
+  return p->AsExprDoc(buffer_region->buffer)->Index(indices);
+}
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BufferRegion>(PrintBufferRegion);
 
 }  // namespace printer
 }  // namespace script

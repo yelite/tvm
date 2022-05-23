@@ -87,7 +87,7 @@ class MetadataFrameNode : public FrameNode {
 
 class MetadataFrame : public Frame {
  public:
-  MetadataFrame();
+  MetadataFrame(SymbolTable sym);
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(MetadataFrame, Frame, MetadataFrameNode);
 };
 

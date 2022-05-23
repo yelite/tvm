@@ -154,6 +154,15 @@ Doc PrintPrimFunc(tir::PrimFunc func, IRDocsifier p) {
   // TODO: support T.func_attrs
   // TODO: support name
   // TODO: support preflatten buffers
+
+  if (func->body->IsInstance<tir::BlockRealizeNode>() &&
+      func->body.as<BlockRealizeNode>()->iter_values.empty() &&
+      func->body.as<BlockRealizeNode>()->block->annotations.empty()) {
+    body = runtime::Concat(body, AsStmtDocArray(func->body.as<BlockRealizeNode>()->block, p));
+  } else {
+    body = runtime::Concat(body, AsStmtDocArray(func->body, p));
+  }
+
   return FunctionDoc(/*name=*/IdDoc("main"),  //
                      /*args=*/args,
                      /*decorators=*/{TIR(p)->Attr("prim_func")},

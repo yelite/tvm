@@ -112,8 +112,8 @@ template <typename FrameType>
 Array<FrameType> IRDocsifierNode::GetFrames() const {
   Array<FrameType> result;
   for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
-    if ((*it)->IsInstance<FrameType>()) {
-      result.push_back(*it);
+    if (const auto* f = (*it).as<typename FrameType::ContainerType>()) {
+      result.push_back(GetRef<FrameType>(f));
     }
   }
   return result;

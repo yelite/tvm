@@ -21,6 +21,7 @@
 
 #include <tvm/tir/buffer.h>
 #include <tvm/tir/expr.h>
+#include <tvm/tir/stmt.h>
 
 #include "../ir_docsifier.h"
 
@@ -68,6 +69,22 @@ class TIRGeneralFrame : public TIRFrame {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRGeneralFrame, TIRFrame, TIRGeneralFrameNode);
 };
 
+class TIRLoopFrameNode : public TIRFrameNode {
+ public:
+  Array<tir::For> loops;  // the first element is the outer-most loop
+
+  static constexpr const char* _type_key = "script.TIRLoopFrame";
+  TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, FrameNode);
+};
+
+class TIRLoopFrame : public TIRFrame {
+ public:
+  using TIRFrame::TIRFrame;
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRLoopFrame, TIRFrame, TIRLoopFrameNode);
+};
+
+Map<tir::Var, tir::For> GetLoopVarMap(IRDocsifier p);
+
 struct BufferPrintInfo {
   tir::Buffer buffer;
   Array<PrimExpr> shape;
@@ -81,6 +98,8 @@ struct BufferPrintInfo {
   Optional<ExprDoc> buffer_type;
 
   ExprDoc AsCall(const ExprDoc& prefix, std::function<ExprDoc(const PrimExpr&)> converter) const;
+  ExprDoc AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
+                 std::function<ExprDoc(const PrimExpr&)> converter) const;
 };
 
 std::vector<BufferPrintInfo> GetBufferPrintInfo(

@@ -31,6 +31,19 @@ inline bool AllowConciseScoping(const IRDocsifier& p) {
   return f != nullptr && f->allow_concise_scoping_;
 }
 
+Array<StmtDoc> AsStmtDocArray(const ObjectRef& obj, IRDocsifier p) {
+  Doc doc = p->AsDoc<Doc>(obj);
+  if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
+    return stmt_block->stmts;
+  } else if (const auto* stmt_node = doc.as<StmtDocNode>()) {
+    return {GetRef<StmtDoc>(stmt_node)};
+  } else {
+    LOG(FATAL) << "Expect to get StmtBlockDoc or StmtDoc, got "
+               << Object::TypeIndex2Key(doc->type_index());
+    throw;
+  }
+}
+
 inline IdDoc TIR(const IRDocsifier& p) { return IdDoc(p->ir_prefix.Get("tir").value_or("T")); }
 
 inline LiteralDoc DType2Literal(const DLDataType& dtype) {

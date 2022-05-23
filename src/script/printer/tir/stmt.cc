@@ -30,6 +30,7 @@
 #include <tvm/tir/expr_functor.h>
 #include <tvm/tir/op.h>
 #include <tvm/tir/stmt_functor.h>
+#include <tvm/runtime/logging.h>
 
 #include "../../../tir/transforms/ir_utils.h"
 #include "../util.h"
@@ -130,19 +131,6 @@ Array<StmtDoc> GetFreeVariableDefinitions(const PrimExpr& expr, IRDocsifier p) {
     }
   }
   return defs;
-}
-
-Array<StmtDoc> AsStmtDocArray(const ObjectRef& obj, IRDocsifier p) {
-  Doc doc = p->AsDoc<Doc>(obj);
-  if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
-    return stmt_block->stmts;
-  } else if (const auto* stmt_node = doc.as<StmtDocNode>()) {
-    return {GetRef<StmtDoc>(stmt_node)};
-  } else {
-    LOG(FATAL) << "Expect to get StmtBlockDoc or StmtDoc, got "
-               << Object::TypeIndex2Key(doc->type_index());
-    throw;
-  }
 }
 
 StmtBlockDoc AsConciseScopedStmts(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body,
@@ -304,7 +292,7 @@ StmtBlockDoc PrintAllocate(tir::Allocate stmt, IRDocsifier p) {
   // TODO: Print aliasing buffers
   AllocUsage usage = FindAllocateUsage(stmt.get());
 
-  auto f_var_defined = [&p](const arith::VarNode* var) -> bool {
+  auto f_var_defined = [&p](const tir::VarNode* var) -> bool {
     return p->sym->GetObjectDoc(GetRef<tir::Var>(var)).defined();
   };
   std::unordered_set<const tir::VarNode*> var_explicit_def;
@@ -357,7 +345,7 @@ StmtBlockDoc PrintAllocate(tir::Allocate stmt, IRDocsifier p) {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Allocate>(PrintAllocate);
 
-StmtDoc PrintAllocateConst(tir::AllocateConst stmt, IRDocsifier p) {}
+StmtDoc PrintAllocateConst(tir::AllocateConst stmt, IRDocsifier p) { throw; }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AllocateConst>(PrintAllocateConst);
 
@@ -406,19 +394,15 @@ StmtBlockDoc PrintAttrStmt(tir::AttrStmt stmt, IRDocsifier p) {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AttrStmt>(PrintAttrStmt);
 
-class TIRLoopFrameNode : public TIRFrameNode {
- public:
-  Array<tir::For> loops;  // the first element is the outer-most loop
-
-  static constexpr const char* _type_key = "script.TIRLoopFrame";
-  TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, FrameNode);
-};
-
-class TIRLoopFrame : public TIRFrame {
- public:
-  using TIRFrame::TIRFrame;
-  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRLoopFrame, TIRFrame, TIRLoopFrameNode);
-};
+Map<tir::Var, tir::For> GetLoopVarMap(IRDocsifier p) {
+  Map<tir::Var, tir::For> result;
+  for (const TIRLoopFrame& frame : p->GetFrames<TIRLoopFrame>()) {
+    for (const tir::For& loop : frame->loops) {
+      result.Set(loop->loop_var, loop);
+    }
+  }
+  return result;
+}
 
 bool IsSimpleLoop(const tir::ForNode* stmt,
                   const std::vector<const tir::ForNode*>& previous_loops) {
@@ -513,6 +497,221 @@ StmtDoc PrintFor(tir::For stmt, IRDocsifier p) {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::For>(PrintFor);
 
+StmtBlockDoc PrintBlock(tir::Block stmt, IRDocsifier p) {
+  TIRLoopFrame frame(p->sym);
+  WithCtx with_frame = p->WithFrame(frame);
+  Array<StmtDoc> body;
+
+  auto f_var_defined = [&p](const tir::VarNode* var) -> bool {
+    return p->sym->GetObjectDoc(GetRef<tir::Var>(var)).defined();
+  };
+  std::unordered_set<const tir::VarNode*> var_explicit_def;
+  std::unordered_map<const tir::VarNode*, const tir::BufferNode*> var_associated_def;
+  std::vector<BufferPrintInfo> buffer_print_infos = GetBufferPrintInfo(
+      std::vector<tir::Buffer>(stmt->alloc_buffers.begin(), stmt->alloc_buffers.end()),
+      f_var_defined, &var_explicit_def, &var_associated_def);
+
+  for (const auto& buffer_print_info : buffer_print_infos) {
+    const tir::Buffer& buf = buffer_print_info.buffer;
+    IdDoc lhs = frame->DefByName(buf, p->sym->GetUniqueName(buf->name));
+    frame->DefByDoc(buf->data, lhs->Attr("data"));
+    ExprDoc rhs =
+        buffer_print_info.AsCall(TIR(p)->Attr("alloc_buffer"),
+                                 [&p](const PrimExpr& e) -> ExprDoc { return p->AsExprDoc(e); });
+    body.push_back(AssignDoc(lhs, NullOpt, rhs));
+  }
+
+  for (const auto& match_buffer : stmt->match_buffers) {
+    IdDoc lhs =
+        frame->DefByName(match_buffer->buffer, p->sym->GetUniqueName(match_buffer->buffer->name));
+    BufferPrintInfo info = GetBufferPrintInfo({match_buffer->buffer}, f_var_defined,
+                                              &var_explicit_def, &var_associated_def)
+                               .at(0);
+    ExprDoc rhs = info.AsCall(TIR(p)->Attr("match_buffer"), {p->AsExprDoc(match_buffer->source)},
+                              [&p](const PrimExpr& e) -> ExprDoc { return p->AsExprDoc(e); });
+    body.push_back(AssignDoc(lhs, NullOpt, rhs));
+  }
+
+  if (stmt->init.defined()) {
+    body.push_back(ScopeDoc(TIR(p)->Attr("init")->Call({}), AsStmtDocArray(stmt->init.value(), p)));
+  }
+
+  body = runtime::Concat(body, AsStmtDocArray(stmt->body, p));
+
+  return StmtBlockDoc(body);
+}
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Block>(PrintBlock);
+
+namespace {
+struct BlockVarBinding {
+  tir::IterVar lhs;
+  PrimExpr rhs;
+
+  BlockVarBinding(tir::IterVar lhs, PrimExpr rhs) : lhs(lhs), rhs(rhs) {}
+};
+}  // namespace
+
+std::vector<std::vector<BlockVarBinding>> GetBlockVarGroups(
+    const Array<tir::IterVar>& iter_vars, const Array<PrimExpr>& values,
+    const Map<tir::Var, tir::For>& loop_var_map) {
+  ICHECK_EQ(iter_vars.size(), values.size());
+  ICHECK(iter_vars.size() > 0);
+
+  std::vector<std::vector<BlockVarBinding>> result;
+  result.emplace_back();
+
+  tir::ExprDeepEqual expr_equal;
+  auto is_simple_remap = [&expr_equal, &loop_var_map](const tir::IterVar& iter_var,
+                                                      const PrimExpr& value) -> bool {
+    if (iter_var->iter_type != tir::kDataPar && iter_var->iter_type != tir::kCommReduce)
+      return false;
+    if (!value->IsInstance<tir::VarNode>()) {
+      return false;
+    }
+    const auto& var = Downcast<tir::Var>(value);
+    auto it = loop_var_map.find(var);
+    return it != loop_var_map.end() && expr_equal((*it).second->min, iter_var->dom->min) &&
+           expr_equal((*it).second->extent, iter_var->dom->extent);
+  };
+
+  bool last_is_simple_remap = true;
+  for (size_t i = 0; i < iter_vars.size(); i++) {
+    const tir::IterVar& iter_var = iter_vars[i];
+    const PrimExpr& value = values[i];
+    bool current_is_simple_remap = is_simple_remap(iter_var, value);
+    if (!(current_is_simple_remap && last_is_simple_remap)) {
+      // Group continues iff. both current var and previous var are simple remapping
+      result.emplace_back();
+    }
+    result.back().emplace_back(iter_var, value);
+    last_is_simple_remap = current_is_simple_remap;
+  }
+
+  return result;
+}
+
+AssignDoc PrintBlockVar(const BlockVarBinding& block_var_binding, IRDocsifier p) {
+  ExprDoc lhs = p->AsExprDoc(block_var_binding.lhs);
+  String iter_type;
+  switch (block_var_binding.lhs->iter_type) {
+    case tir::kDataPar:
+      iter_type = "spatial";
+      break;
+    case tir::kCommReduce:
+      iter_type = "reduce";
+      break;
+    case tir::kOrdered:
+      iter_type = "scan";
+      break;
+    case tir::kOpaque:
+      iter_type = "opaque";
+      break;
+    default:
+      LOG(FATAL) << "Unknown block var iter type: " << block_var_binding.lhs->iter_type;
+      break;
+  }
+  Array<ExprDoc> args;
+  const Range& dom = block_var_binding.lhs->dom;
+  if (tir::is_zero(dom->min)) {
+    args.push_back(p->AsExprDoc(dom->extent));
+  } else {
+    args.push_back(TupleDoc({p->AsExprDoc(dom->min), p->AsExprDoc(dom->min + dom->extent)}));
+  }
+  args.push_back(p->AsExprDoc(block_var_binding.rhs));
+  ExprDoc rhs = TIR(p)->Attr("axis")->Attr(iter_type)->Call(args);
+
+  return AssignDoc(lhs, NullOpt, rhs);
+}
+
+AssignDoc PrintGroupedSimpleRemappingBlockVars(
+    const std::vector<BlockVarBinding>& block_var_bindings, IRDocsifier p) {
+  std::vector<ExprDoc> iter_var_ids;
+  std::vector<ExprDoc> iter_value_docs;
+  std::string iter_type;
+
+  for (const BlockVarBinding& binding : block_var_bindings) {
+    const tir::IterVar& iter_var = binding.lhs;
+    const PrimExpr& iter_value = binding.rhs;
+
+    iter_var_ids.emplace_back(p->AsExprDoc(iter_var));
+    if (iter_var->iter_type == tir::kDataPar) {
+      iter_type += "S";
+    } else if (iter_var->iter_type == tir::kCommReduce) {
+      iter_type += "R";
+    } else {
+      ICHECK(false);
+    }
+    iter_value_docs.emplace_back(p->AsExprDoc(iter_value));
+  }
+
+  ExprDoc lhs = TupleDoc(iter_var_ids);
+  ExprDoc rhs = TIR(p)->Attr("axis")->Attr("remap")->Call(
+      {LiteralDoc::Str(iter_type), ListDoc(iter_value_docs)});
+
+  return AssignDoc(lhs, NullOpt, rhs);
+}
+
+Array<StmtDoc> PrintBlockVars(const tir::BlockRealize& stmt, IRDocsifier p) {
+  Map<tir::Var, tir::For> loop_var_map = GetLoopVarMap(p);
+  Array<StmtDoc> result;
+  for (const std::vector<BlockVarBinding>& binding_group :
+       GetBlockVarGroups(stmt->block->iter_vars, stmt->iter_values, loop_var_map)) {
+    ICHECK_NE(binding_group.size(), 0);
+    if (binding_group.size() == 1) {
+      result.push_back(PrintBlockVar(binding_group[0], p));
+    } else {
+      result.push_back(PrintGroupedSimpleRemappingBlockVars(binding_group, p));
+    }
+  }
+  return result;
+}
+
+Array<StmtDoc> PrintBlockAttrs(const tir::BlockRealize& stmt, IRDocsifier p) {
+  std::vector<ExprDoc> attr_exprs;
+  const tir::Block& block = stmt->block;
+
+  if (!tir::is_one(stmt->predicate)) {
+    attr_exprs.emplace_back(TIR(p)->Attr("where")->Call({p->AsExprDoc(stmt->predicate)}));
+  }
+  attr_exprs.push_back(TIR(p)->Attr("reads")->Call(AsExprDocArray(block->reads, p)));
+  attr_exprs.push_back(TIR(p)->Attr("writes")->Call(AsExprDocArray(block->writes, p)));
+  if (!block->annotations.empty()) {
+    attr_exprs.push_back(TIR(p)->Attr("block_attr")->Call({AsDictDoc(block->annotations, p)}));
+  }
+
+  Array<StmtDoc> result;
+  for (const ExprDoc& attr : attr_exprs) {
+    result.push_back(ExprStmtDoc(attr));
+  }
+
+  return result;
+}
+
+StmtDoc PrintBlockRealize(tir::BlockRealize stmt, IRDocsifier p) {
+  const tir::Block& block = stmt->block;
+
+  Array<ExprDoc> block_args;
+  if (!block->name_hint.empty()) {
+    block_args.push_back(LiteralDoc::Str(block->name_hint));
+  }
+  ExprDoc block_begin_expr = TIR(p)->Attr("block")->Call(block_args);
+
+  TIRGeneralFrame frame(p->sym);
+  WithCtx with_frame = p->WithFrame(frame);
+  for (const tir::IterVar& iter_var : block->iter_vars) {
+    frame->DefByName(iter_var->var, p->sym->GetUniqueName(iter_var->var->name_hint));
+  }
+
+  Array<StmtDoc> body = PrintBlockVars(stmt, p);
+  body = runtime::Concat(body, PrintBlockAttrs(stmt, p));
+  body = runtime::Concat(body, AsStmtDocArray(block, p));
+
+  return ScopeDoc(block_begin_expr, body);
+}
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BlockRealize>(PrintBlockRealize);
+
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::BufferRealize>([](tir::BufferRealize stmt, IRDocsifier p) -> Doc {
       LOG(FATAL) << "TVM Script Printer Internal Error: All the BufferRealize should be folded "
@@ -529,7 +728,6 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       LOG(FATAL) << "ProducerRealize cannot be printed";
       throw;
     });
-// • ForNode: Class
 // • BlockNode: Class
 // • BlockRealizeNode: Class
 //
