@@ -25,12 +25,12 @@
 #include <tvm/runtime/container/array.h>
 #include <tvm/runtime/container/optional.h>
 #include <tvm/runtime/data_type.h>
+#include <tvm/runtime/logging.h>
 #include <tvm/tir/analysis.h>
 #include <tvm/tir/expr.h>
 #include <tvm/tir/expr_functor.h>
 #include <tvm/tir/op.h>
 #include <tvm/tir/stmt_functor.h>
-#include <tvm/runtime/logging.h>
 
 #include "../../../tir/transforms/ir_utils.h"
 #include "../util.h"
@@ -719,12 +719,12 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       throw;
     });
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::ProducerStore>([](auto stmt, IRDocsifier p) -> Doc {
+    .set_dispatch<tir::ProducerStore>([](tir::ProducerStore stmt, IRDocsifier p) -> Doc {
       LOG(FATAL) << "ProducerStore cannot be printed";
       throw;
     });
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::ProducerRealize>([](auto stmt, IRDocsifier p) -> Doc {
+    .set_dispatch<tir::ProducerRealize>([](tir::ProducerRealize stmt, IRDocsifier p) -> Doc {
       LOG(FATAL) << "ProducerRealize cannot be printed";
       throw;
     });

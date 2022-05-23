@@ -25,8 +25,8 @@
 namespace tvm {
 namespace script {
 namespace printer {
-template <typename DocType, typename NodeType>
 
+template <typename DocType, typename NodeType>
 Array<DocType> AsDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_docsifier) {
   Array<DocType> result;
   for (auto& ref : refs) {
@@ -40,7 +40,7 @@ Array<ExprDoc> AsExprDocArray(const Array<RefType>& refs, const IRDocsifier& ir_
   return AsDocArray<ExprDoc>(refs, ir_docsifier);
 }
 
-DictDoc AsDictDoc(const Map<String, ObjectRef>& dict, const IRDocsifier& ir_docsifier)
+inline DictDoc AsDictDoc(const Map<String, ObjectRef>& dict, const IRDocsifier& ir_docsifier)
 {
     Array<ExprDoc> keys;
     Array<ExprDoc> values;

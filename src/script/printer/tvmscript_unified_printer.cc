@@ -30,6 +30,8 @@ namespace printer {
 String AsTVMScript(const ObjectRef& node, Map<String, String> ir_prefix, int32_t indent_spaces) {
   IRDocsifier ir_docsifier(ir_prefix);
 
+  auto tir_dispatch_ctx = ir_docsifier->WithDispatchToken("tir");
+
   // TODO: Handle metadata frame
   MetadataFrame metadata_frame(ir_docsifier->sym);
   VarDefFrame def_frame(ir_docsifier->sym);

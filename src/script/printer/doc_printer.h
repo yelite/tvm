@@ -100,9 +100,13 @@ class PythonDocPrinter : public DocPrinter {
 
   void DecreaseIndent() { indent_ -= indent_spaces_; }
 
-  void PrintWithIncreasedIndent(const Doc& doc) {
+  void PrintWithIncreasedIndent(const StmtDoc& doc) { PrintWithIncreasedIndent({doc}); }
+
+  void PrintWithIncreasedIndent(const Array<StmtDoc>& doc) {
     IncreaseIndent();
-    PrintDoc(doc);
+    for (const StmtDoc& stmt : doc) {
+      PrintDoc(stmt);
+    }
     DecreaseIndent();
   }
 

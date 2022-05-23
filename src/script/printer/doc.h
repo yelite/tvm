@@ -280,7 +280,7 @@ class OperationDocNode : public ExprDocNode {
     kFloorMod = 105,
 
     kSpecial = 1000,
-    kAssert = 1001,    
+    kAssert = 1001,
   };
 
   Kind kind;
@@ -305,7 +305,7 @@ class OperationDoc : public ExprDoc {
 class LambdaDocNode : public ExprDocNode {
  public:
   Array<IdDoc> args;
-  ExprDoc body;
+  ExprDoc body{nullptr};
 
   void VisitAttrs(AttrVisitor* v) {
     ExprDocNode::VisitAttrs(v);
@@ -313,7 +313,7 @@ class LambdaDocNode : public ExprDocNode {
     v->Visit("body", &body);
   }
 
-  static constexpr const char* _type_key = "script.Lambda";
+  static constexpr const char* _type_key = "script.LambdaDoc";
   TVM_DECLARE_FINAL_OBJECT_INFO(LambdaDocNode, ExprDocNode);
 };
 
@@ -418,7 +418,7 @@ class AssignDoc : public StmtDoc {
 
 class IfDocNode : public StmtDocNode {
  public:
-  ExprDoc predicate;
+  ExprDoc predicate{nullptr};
   Array<StmtDoc> then_branch;
   Array<StmtDoc> else_branch;
 
@@ -441,7 +441,7 @@ class IfDoc : public StmtDoc {
 
 class WhileDocNode : public StmtDocNode {
  public:
-  ExprDoc predicate;
+  ExprDoc predicate{nullptr};
   Array<StmtDoc> body;
 
   void VisitAttrs(AttrVisitor* v) {

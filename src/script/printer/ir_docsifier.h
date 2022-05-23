@@ -101,8 +101,8 @@ class IRDocsifier : public ObjectRef {
 template <typename FrameType>
 Optional<FrameType> IRDocsifierNode::GetFrame() const {
   for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
-    if ((*it)->IsInstance<FrameType>()) {
-      return *it;
+    if (const auto* f = (*it).as<typename FrameType::ContainerType>()) {
+      return GetRef<FrameType>(f);
     }
   }
   return NullOpt;

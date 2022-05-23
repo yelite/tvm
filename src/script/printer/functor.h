@@ -24,6 +24,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "tvm/runtime/logging.h"
 
 namespace tvm {
 namespace script {
@@ -96,7 +97,12 @@ class ObjectFunctor<R(const ObjectRef& n, Args...)> {
     if (type_index >= tab.size()) {
       return nullptr;
     }
-    return &tab[type_index];
+    const PackedFunc* f = &tab[type_index];
+    if (f->defined()) {
+        return f;
+    } else {
+        return nullptr;
+    }
   }
 };
 

@@ -212,6 +212,18 @@ TVM_REGISTER_GLOBAL("script.IfDoc")
       return IfDoc(predicate, then_branch, else_branch);
     });
 
+WhileDoc::WhileDoc(ExprDoc predicate, Array<StmtDoc> body) {
+  ObjectPtr<WhileDocNode> n = make_object<WhileDocNode>();
+  n->predicate = predicate;
+  n->body = body;
+  this->data_ = n;
+}
+TVM_REGISTER_NODE_TYPE(WhileDocNode);
+TVM_REGISTER_GLOBAL("script.WhileDoc")
+    .set_body_typed([](ExprDoc predicate, Array<StmtDoc> body) {
+      return WhileDoc(predicate, body);
+    });
+
 ForDoc::ForDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body) {
   ObjectPtr<ForDocNode> n = make_object<ForDocNode>();
   n->lhs = lhs;

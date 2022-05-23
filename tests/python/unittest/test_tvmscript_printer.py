@@ -5,7 +5,7 @@ _as_tvm_script = tvm.get_global_func("experiment.AsTVMScript")
 
 
 def to_tvmscript(node) -> str:
-    return _as_tvm_script(node, "T")
+    return _as_tvm_script(node, {"tir": "T"}, 4)
 
 
 def format_script(s: str) -> str:
