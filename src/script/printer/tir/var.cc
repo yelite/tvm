@@ -24,6 +24,7 @@
 
 #include "../util.h"
 #include "./utils.h"
+#include "tvm/runtime/logging.h"
 
 namespace tvm {
 namespace script {
@@ -34,16 +35,21 @@ ExprDoc PrintVar(tir::Var v, IRDocsifier p) {
   ICHECK_NOTNULL(var_doc);
   return var_doc.value();
 }
-
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Var>(PrintVar);
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::SizeVar>(PrintVar);
+
+ExprDoc PrintBuffer(tir::Buffer buf, IRDocsifier p) {
+    Optional<ExprDoc> buf_doc = p->sym->GetObjectDoc(buf);
+    ICHECK_NOTNULL(buf_doc);
+    return buf_doc.value();
+}
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Buffer>(PrintBuffer);
 
 ExprDoc PrintIterVar(tir::IterVar v, IRDocsifier p) {
   LOG(FATAL) << "Cannot print iter var directly. Please use the helper functions in tir.h for "
                 "specific usage of IterVar.";
   throw;
 }
-
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::IterVar>(PrintIterVar);
 }  // namespace printer
 }  // namespace script

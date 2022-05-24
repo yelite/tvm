@@ -147,7 +147,30 @@ void PythonDocPrinter::PrintTypedDoc(const OperationDoc& doc) {
 
 void PythonDocPrinter::PrintTypedDoc(const CallDoc& doc) {
   PrintDoc(doc->callee);
-  PrintJoinedElements("(", doc->args, ", ", ")");
+
+  output_ << "(";
+
+  bool is_first = true;
+  for (auto& arg : doc->args) {
+    if (is_first) {
+      is_first = false;
+    } else {
+      output_ << ", ";
+    }
+    PrintDoc(arg);
+  }
+  for (size_t i = 0; i < doc->kwargs_keys.size(); i++) {
+    if (is_first) {
+      is_first = false;
+    } else {
+      output_ << ", ";
+    }
+    PrintStringLiteral(doc->kwargs_keys[i]);
+    output_ << "=";
+    PrintDoc(doc->kwargs_values[i]);
+  }
+
+  output_ << ")";
 }
 
 void PythonDocPrinter::PrintTypedDoc(const LambdaDoc& doc) {
@@ -199,15 +222,11 @@ void PythonDocPrinter::PrintTypedDoc(const TupleDoc& doc) {
 }
 
 void PythonDocPrinter::PrintTypedDoc(const StmtBlockDoc& doc) {
-  for (const StmtDoc& stmt : doc->stmts) {
-    PrintDoc(stmt);
-  }
+  LOG(FATAL)
+      << "StmtBlockDoc shouldn't exist in the translated doc tree. Using Array<StmtDoc> instead";
 }
 
-void PythonDocPrinter::PrintTypedDoc(const ExprStmtDoc& doc) {
-  PrintDoc(doc->expr);
-  NewLine();
-}
+void PythonDocPrinter::PrintTypedDoc(const ExprStmtDoc& doc) { PrintDoc(doc->expr); }
 
 void PythonDocPrinter::PrintTypedDoc(const ScopeDoc& doc) {
   output_ << "with ";
@@ -217,9 +236,8 @@ void PythonDocPrinter::PrintTypedDoc(const ScopeDoc& doc) {
     PrintDoc(doc->lhs.value());
   }
   output_ << ":";
-  NewLine();
 
-  PrintWithIncreasedIndent(doc->body);
+  PrintStmtBlock(doc->body);
 }
 
 void PythonDocPrinter::PrintTypedDoc(const IfDoc& doc) {
@@ -233,13 +251,12 @@ void PythonDocPrinter::PrintTypedDoc(const IfDoc& doc) {
     output_ << "pass";
     DecreaseIndent();
   } else {
-    PrintWithIncreasedIndent(doc->then_branch);
+    PrintStmtBlock(doc->then_branch);
   }
 
   if (!doc->else_branch.empty()) {
     output_ << "else:";
-    NewLine();
-    PrintWithIncreasedIndent(doc->else_branch);
+    PrintStmtBlock(doc->else_branch);
   }
 }
 
@@ -247,9 +264,8 @@ void PythonDocPrinter::PrintTypedDoc(const WhileDoc& doc) {
   output_ << "while ";
   PrintDoc(doc->predicate);
   output_ << ":";
-  NewLine();
 
-  PrintWithIncreasedIndent(doc->body);
+  PrintStmtBlock(doc->body);
 }
 
 void PythonDocPrinter::PrintTypedDoc(const ForDoc& doc) {
@@ -258,9 +274,8 @@ void PythonDocPrinter::PrintTypedDoc(const ForDoc& doc) {
   output_ << " in ";
   PrintDoc(doc->rhs);
   output_ << ":";
-  NewLine();
 
-  PrintWithIncreasedIndent(doc->body);
+  PrintStmtBlock(doc->body);
 }
 
 void PythonDocPrinter::PrintTypedDoc(const AssignDoc& doc) {
@@ -274,7 +289,6 @@ void PythonDocPrinter::PrintTypedDoc(const AssignDoc& doc) {
     output_ << " = ";
     PrintDoc(doc->rhs.value());
   }
-  NewLine();
 }
 
 void PythonDocPrinter::PrintTypedDoc(const FunctionDoc& doc) {
@@ -289,8 +303,8 @@ void PythonDocPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   output_ << " -> ";
   PrintDoc(doc->return_type);
   output_ << ":";
-  NewLine();
-  PrintWithIncreasedIndent(doc->body);
+
+  PrintStmtBlock(doc->body);
 }
 
 void PythonDocPrinter::PrintStringLiteral(const String& string) {

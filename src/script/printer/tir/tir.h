@@ -71,7 +71,7 @@ class TIRGeneralFrame : public TIRFrame {
 
 class TIRLoopFrameNode : public TIRFrameNode {
  public:
-  Array<tir::For> loops;  // the first element is the outer-most loop
+  Array<tir::For> loops{};  // the first element is the outer-most loop
 
   static constexpr const char* _type_key = "script.TIRLoopFrame";
   TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, FrameNode);
@@ -79,7 +79,11 @@ class TIRLoopFrameNode : public TIRFrameNode {
 
 class TIRLoopFrame : public TIRFrame {
  public:
-  using TIRFrame::TIRFrame;
+  explicit TIRLoopFrame(SymbolTable sym) {
+    ObjectPtr<TIRLoopFrameNode> n = make_object<TIRLoopFrameNode>();
+    n->sym = sym.get();
+    data_ = std::move(n);
+  }
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRLoopFrame, TIRFrame, TIRLoopFrameNode);
 };
 

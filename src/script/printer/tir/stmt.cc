@@ -335,7 +335,7 @@ StmtBlockDoc PrintAllocate(tir::Allocate stmt, IRDocsifier p) {
     ExprDoc rhs =
         aliasing_buffer_info.AsCall(TIR(p)->Attr("buffer_decl"),
                                     [&p](const PrimExpr& e) -> ExprDoc { return p->AsExprDoc(e); });
-    body.push_back(AssignDoc(lhs, NullOpt, rhs));
+    body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
   body = runtime::Concat(body, AsStmtDocArray(stmt->body, p));
 
@@ -481,6 +481,7 @@ StmtDoc PrintFor(tir::For stmt, IRDocsifier p) {
   while (const auto* for_stmt = target_stmt.as<tir::ForNode>()) {
     if (IsSimpleLoop(for_stmt, simple_loops)) {
       simple_loops.push_back(for_stmt);
+      target_stmt = for_stmt->body;
     } else {
       break;
     }
@@ -488,8 +489,6 @@ StmtDoc PrintFor(tir::For stmt, IRDocsifier p) {
 
   if (simple_loops.size() > 1) {
     return PrintMergedSimpleLoops(simple_loops, p);
-  } else if (simple_loops.size() == 1) {
-    return PrintRegularLoop(GetRef<tir::For>(simple_loops[0]), p);
   } else {
     return PrintRegularLoop(stmt, p);
   }
@@ -518,7 +517,7 @@ StmtBlockDoc PrintBlock(tir::Block stmt, IRDocsifier p) {
     ExprDoc rhs =
         buffer_print_info.AsCall(TIR(p)->Attr("alloc_buffer"),
                                  [&p](const PrimExpr& e) -> ExprDoc { return p->AsExprDoc(e); });
-    body.push_back(AssignDoc(lhs, NullOpt, rhs));
+    body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
 
   for (const auto& match_buffer : stmt->match_buffers) {
@@ -529,7 +528,7 @@ StmtBlockDoc PrintBlock(tir::Block stmt, IRDocsifier p) {
                                .at(0);
     ExprDoc rhs = info.AsCall(TIR(p)->Attr("match_buffer"), {p->AsExprDoc(match_buffer->source)},
                               [&p](const PrimExpr& e) -> ExprDoc { return p->AsExprDoc(e); });
-    body.push_back(AssignDoc(lhs, NullOpt, rhs));
+    body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
 
   if (stmt->init.defined()) {
@@ -592,7 +591,7 @@ std::vector<std::vector<BlockVarBinding>> GetBlockVarGroups(
 }
 
 AssignDoc PrintBlockVar(const BlockVarBinding& block_var_binding, IRDocsifier p) {
-  ExprDoc lhs = p->AsExprDoc(block_var_binding.lhs);
+  ExprDoc lhs = p->AsExprDoc(block_var_binding.lhs->var);
   String iter_type;
   switch (block_var_binding.lhs->iter_type) {
     case tir::kDataPar:
@@ -621,7 +620,7 @@ AssignDoc PrintBlockVar(const BlockVarBinding& block_var_binding, IRDocsifier p)
   args.push_back(p->AsExprDoc(block_var_binding.rhs));
   ExprDoc rhs = TIR(p)->Attr("axis")->Attr(iter_type)->Call(args);
 
-  return AssignDoc(lhs, NullOpt, rhs);
+  return AssignDoc(lhs, rhs, NullOpt);
 }
 
 AssignDoc PrintGroupedSimpleRemappingBlockVars(
@@ -649,7 +648,7 @@ AssignDoc PrintGroupedSimpleRemappingBlockVars(
   ExprDoc rhs = TIR(p)->Attr("axis")->Attr("remap")->Call(
       {LiteralDoc::Str(iter_type), ListDoc(iter_value_docs)});
 
-  return AssignDoc(lhs, NullOpt, rhs);
+  return AssignDoc(lhs, rhs, NullOpt);
 }
 
 Array<StmtDoc> PrintBlockVars(const tir::BlockRealize& stmt, IRDocsifier p) {

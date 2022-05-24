@@ -53,12 +53,13 @@ Doc PrintPrimFunc(tir::PrimFunc func, IRDocsifier p) {
   std::unordered_map<const VarNode*, BufferPrintInfo> var2info;
   std::vector<BufferPrintInfo> match_buffer_info;
   {
+    std::vector<Var> buffer_vars;
     std::vector<Buffer> buffers;
     for (const auto& kv : func->buffer_map) {
-      Var data_var = kv.first;
+      Var buffer_var = kv.first;
       Buffer buffer = kv.second;
-      ICHECK(buffer->data.same_as(data_var));
       buffers.push_back(buffer);
+      buffer_vars.push_back(buffer_var);
     }
     auto f_var_defined = [&p](const VarNode* var) -> bool {
       return p->sym->GetObjectDoc(GetRef<Var>(var)).defined();
@@ -67,14 +68,13 @@ Doc PrintPrimFunc(tir::PrimFunc func, IRDocsifier p) {
         GetBufferPrintInfo(buffers, f_var_defined, &var_explicit_def, &var_associated_def);
     int n = buffers.size();
     for (int i = 0; i < n; ++i) {
-      const Buffer& buffer = buffers[i];
       const BufferPrintInfo& info = buffer_infos[i];
       if (info.data.defined() || info.strides.defined() || info.elem_offset.defined() ||
           info.scope.defined() || info.align.defined() || info.offset_factor.defined() ||
           info.buffer_type.defined()) {
         match_buffer_info.push_back(info);
       } else {
-        var2info[buffer->data.get()] = info;
+        var2info[buffer_vars[i].get()] = info;
       }
     }
   }

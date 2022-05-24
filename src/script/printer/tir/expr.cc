@@ -53,7 +53,7 @@ ExprDoc PrintBinOp(BinOpType e, IRDocsifier p) {
 }
 
 template<>
-OperationDocNode::Kind GetBinaryOpKind<tir::AddNode>() { return OperationDocNode::Kind::kAdd; }
+OperationDocNode::Kind GetBinaryOpKind<tir::Add>() { return OperationDocNode::Kind::kAdd; }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Add>(PrintBinOp<tir::Add>);
 
 ExprDoc PrintSelect(tir::Select e, IRDocsifier p) {
