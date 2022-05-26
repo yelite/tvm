@@ -27,7 +27,8 @@ import tvm
 from tvm import IRModule
 from tvm import relay
 from tvm.relay import backend, testing
-from aot_test_utils import AOT_DEFAULT_RUNNER, AOTTestModel, generate_ref_data, compile_and_run
+from tvm.testing.aot import generate_ref_data
+from tvm.micro.testing.aot_test_utils import AOT_DEFAULT_RUNNER
 
 
 def test_error_c_interface():
@@ -145,6 +146,24 @@ def test_mobilenet(enable_usmp, target_kind):
     assert (runner.get_output(0).asnumpy() == list(ref_outputs.values())[0]).all()
 
 
+def test_module_list():
+    x = tvm.relay.var("x", tvm.relay.TensorType([1], dtype="float32"))
+    expr = tvm.relay.add(x, tvm.relay.Constant(tvm.nd.array(np.array([1], dtype="float32"))))
+    mod = tvm.relay.build(
+        tvm.IRModule.from_expr(tvm.relay.Function([x], expr)),
+        target="c",
+        executor=tvm.relay.backend.Executor("aot", {"interface-api": "packed"}),
+        mod_name="unusual_module_name_fred",
+    )
+    temp_dir = tvm.contrib.utils.TempDirectory()
+    test_so_path = temp_dir / "test.so"
+    mod.export_library(test_so_path, cc="gcc", options=["-std=c11"])
+    loaded_mod = tvm.runtime.load_module(test_so_path)
+    list_module_names = loaded_mod.get_function("list_module_names")
+    names_expected = ["unusual_module_name_fred"]
+    assert list(sorted(names_expected)) == list(sorted(list_module_names()))
+
+
 def test_create_executor():
     x = tvm.relay.var("x", tvm.relay.TensorType([1], dtype="float32"))
     expr = tvm.relay.add(x, tvm.relay.Constant(tvm.nd.array(np.array([1], dtype="float32"))))
@@ -183,4 +202,4 @@ def test_pass_wrong_device_arg():
 
 
 if __name__ == "__main__":
-    sys.exit(pytest.main([__file__] + sys.argv[1:]))
+    tvm.testing.main()

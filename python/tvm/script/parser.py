@@ -20,7 +20,8 @@ We use [synr](https://synr.readthedocs.io) to get an AST that is stable over
 different python versions. Synr also provides an error handling context that we
 use for error reporting.
 """
-# pylint: disable=invalid-name, inconsistent-return-statements, no-else-return
+# pylint: disable=invalid-name, inconsistent-return-statements, no-else-return, broad-except
+import types
 import json
 import operator
 import inspect
@@ -547,7 +548,7 @@ class TVMScriptParser(Transformer):
         AST abstract grammar:
             Assign(expr* targets, expr value, string? type_comment)
 
-        By now 3 patterns of Assign is supported:
+        By now 5 patterns of Assign is supported:
             1. special stmts with return value
                 1.1 Buffer = T.match_buffer()/T.buffer_decl()
                 1.2 Var = T.var()
@@ -556,6 +557,9 @@ class TVMScriptParser(Transformer):
             3. (Store)       Var[PrimExpr] = PrimExpr
             4. with scope handlers with concise scoping and var def
                 4.1 var = T.allocate()
+            5. A call to a pure python function, consuming and producing TVMScript values.
+               The outputs are inlined into the following body (no variable is created).
+               x, y = f(...)
         """
 
         if isinstance(node.rhs, ast.Call):
@@ -581,6 +585,35 @@ class TVMScriptParser(Transformer):
                 arg_list = self.parse_arg_list(func, node.rhs)
                 func.handle(node, self.context, arg_list, node.rhs.func_name.span)
                 return self.parse_body(node)
+            elif isinstance(func, types.FunctionType):
+                # Pattern 5
+                args = [self.transform(arg) for arg in node.rhs.params]
+                try:
+                    out = func(*args)
+                except Exception as e:
+                    self.report_error(
+                        "Error occured when invoking the function "
+                        + func.__name__
+                        + ": \n"
+                        + str(e),
+                        node.rhs.span,
+                    )
+
+                if len(node.lhs) == 1 and not isinstance(out, list):
+                    out = [out]
+
+                assert len(out) == len(node.lhs)
+
+                for var, value in zip(node.lhs, out):
+                    self.context.update_symbol(var.id.name, value, node)
+
+                body = self.parse_body(node)
+
+                for var, value in zip(node.lhs, out):
+                    self.context.remove_symbol(var.id.name)
+
+                return body
+
         if isinstance(node.rhs, (ast.Call, ast.Constant)):
             # Pattern 4 of let binding
             value = self.transform(node.rhs)
@@ -610,7 +643,7 @@ class TVMScriptParser(Transformer):
             return tvm.tir.LetStmt(var, value, body, span=tvm_span_from_synr(node.span))
 
         self.report_error(
-            """Assignments should be either
+            """Assignments should be one of:
             1. A "special statement" with return value
                 1.1 Buffer = T.match_buffer()/T.buffer_decl()
                 1.2 Var = T.var()
@@ -618,7 +651,10 @@ class TVMScriptParser(Transformer):
             2. A store into a buffer: Buffer[PrimExpr, PrimExpr, ..., PrimExpr] = PrimExpr
             3. A store into a variable: Var[PrimExpr] = PrimExpr
             4. A with scope handler with concise scoping and var def
-                4.1 var = T.allocate()""",
+                4.1 var = T.allocate()
+            5. The right-hand side being a call to a pure python function, consuming and
+               producing TVMScript values.
+               x, y = f(...)""",
             node.span,
         )
 
@@ -635,7 +671,14 @@ class TVMScriptParser(Transformer):
                     f"cannot be indexed by {len(indexes)}-dimensional indices.",
                     node.params[1].span,
                 )
+
+            def __convert_index(x):
+                if isinstance(x, Slice):
+                    return x.as_index_expr(self.report_error)
+                return x
+
             # BufferStore
+            indexes = [__convert_index(x) for x in indexes]
             return tvm.tir.BufferStore(
                 symbol,
                 tvm.runtime.convert(rhs, span=rhs_span),
@@ -747,9 +790,9 @@ class TVMScriptParser(Transformer):
             withitem = (expr context_expr, expr? optional_vars)
         By now 2 patterns of With is supported:
             1. with scope handler with symbol def
-                with T.block(*axes)/T.allocate() as targets:
+                with T.allocate() as targets:
             2. with scope handler without symbol def
-                with T.let()/T.Assert()/T.attr()/T.realize()
+                with T.block(*axes)/T.let()/T.Assert()/T.attr()/T.realize()
         """
 
         if not isinstance(node.rhs, ast.Call):
@@ -952,11 +995,18 @@ class TVMScriptParser(Transformer):
         )
 
     def transform_Slice(self, node):
+        """Index slice visitor."""
         start = self.transform(node.start)
         end = self.transform(node.end)
-        if not (isinstance(node.step, ast.Constant) and node.step.value == 1):
-            self.report_error("Only step size 1 is supported for slices.", node.step.span)
-        return Slice(start, end)
+        if not (
+            isinstance(node.step, ast.Constant)
+            and isinstance(node.step.value, int)
+            and node.step.value > 0
+        ):
+            self.report_error(
+                "Only positive integer step size is supported for slices.", node.step.span
+            )
+        return Slice(start, end, node.step.value, tvm_span_from_synr(node.span))
 
     def transform_Subscript(self, node):
         """Array access visitor.
@@ -1194,10 +1244,14 @@ class TVMScriptParser(Transformer):
             )
 
         param_types = []
-        for param in node.params:
+        for idx, param in enumerate(node.params):
             param_type = self.transform(param)
-            if not isinstance(param_type, ty.TypeGeneric):
-                self.report_error(f"Expected a type but found {type(param).__name__}", param.span)
+            if not isinstance(param_type, ty.TypeGeneric) and func.require_type_generic_at(idx):
+                self.report_error(
+                    f"Expected a type but found {type(param).__name__} "
+                    f"at {idx}th type argument",
+                    param.span,
+                )
 
             param_types.append(param_type)
 
