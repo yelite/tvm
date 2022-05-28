@@ -25,7 +25,7 @@ from tvm.meta_schedule import TuneConfig
 import functools
 from tvm import relay
 import tempfile
-from tvm.meta_schedule.tune import tune_extracted_tasks, tune_relay
+from tvm.meta_schedule.tune import tune_relay
 
 class TVMScriptRtModule(torch.nn.Module):
     def __init__(self, module : tvm.runtime.Module):
@@ -61,19 +61,13 @@ class TVMScriptIRModule(torch.nn.Module):
         self.engine_cpu = torch.classes.tvm_torch.TVMScriptRuntime()
         
     def __build_cpu(self):
-        # sch = tvm.tir.Schedule(self.ir_module)
         runtime_module = tvm.build(self.ir_module)
         self.__save_cpu_rt_module(runtime_module)
         
     def __save_cuda_rt_module(self, runtime_module):
-        # func = tvm.get_global_func("tvmtorch.save_runtime_mod")
-        # func(runtime_module)
-
-        # self.engine_cuda = torch.classes.tvm_torch.TVMScriptRuntime()
         self.engine_cuda = runtime_module
         
     def __build_cuda(self):
-        # sch = tvm.tir.Schedule(self.ir_module)
         runtime_module = tvm.build(self.ir_module, target=tvm.target.cuda())
         self.__save_cuda_rt_module(runtime_module)
         
@@ -89,7 +83,22 @@ class TVMScriptIRModule(torch.nn.Module):
             return self.engine_cpu.forward(torch_inputs)
         
 
-def as_torch(func: tvm.ir.module.IRModule):
+def as_torch(
+    func: Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc, Callable]
+):
+    """A decorator of converting TensorIR to PyTorch nn.Module.
+
+    Parameters
+    ----------
+    func : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc, Callable]
+        The function to be parsed.
+
+
+    Returns
+    -------
+    mod : TVMScriptIRModule
+        It will return an object of TVMScriptIRModule, which is the subclass of the original nn.Module.
+    """
     if isinstance(func, tvm.ir.module.IRModule) or isinstance(func, tvm.tir.function.PrimFunc):
         return TVMScriptIRModule(func)
     elif isinstance(func, Callable):
@@ -115,7 +124,41 @@ def tuning_relay(mod : tvm.ir.module.IRModule, params : Dict, config : TuneConfi
         )
         return rt_mod1
           
-def build_rt_mod(func, example_inputs, tuning_config, dev = None, target = None):
+def optimize_torch(
+    func, 
+    example_inputs, 
+    tuning_config, 
+    dev = None, 
+    target = None
+):
+    """Load PyTorch model that could be traced by TorchScript, then optimize it via MetaSchedule.
+
+    Parameters
+    ----------
+    func : callable or torch.nn.Module 
+        A Python function or nn.Module that could run by TorchScript's trace. (ie: torch.jit.trace(model, input))
+
+    example_inputs : tuple or torch.Tensor 
+        A tuple of example inputs that
+        will run together with `func` by providing the shape information.
+
+    tuning_config : tvm.meta_schedule.TuneConfig
+        The configuration of tuning by MetaSchedule.
+
+    dev : Optional[Union[str, Device]]
+        The device to deploy the module. It can be local or remote when there
+        is only one Device. 
+        If user doesn't set the device, the module is built upon the CPU.
+
+    target : Optional[Union[str, Target]]
+        The target of the compilation.
+        If user doesn't set the target, the module is built upon the LLVM.
+
+    Returns
+    -------
+    mod : TVMScriptRtModule
+        It will return an object of TVMScriptRtModule, which is the subclass of the original nn.Module.
+    """
     if dev: 
         pass 
     else: 

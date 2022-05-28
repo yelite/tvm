@@ -55,4 +55,4 @@ from . import script_torch
 as_torch = script_torch.as_torch
 TVMScriptRtModule = script_torch.TVMScriptRtModule
 TVMScriptIRModule = script_torch.TVMScriptIRModule
-build_rt_mod = script_torch.build_rt_mod
+optimize_torch = script_torch.optimize_torch
