@@ -41,9 +41,9 @@ import torch.utils.benchmark as benchmark
 # -------------------------------
 config = TuneConfig(
                 strategy="evolutionary",
-                num_trials_per_iter=64,
-                max_trials_per_task=2000,
-                max_trials_global=2000,
+                num_trials_per_iter=4,
+                max_trials_per_task=4,
+                max_trials_global=4,
                 search_strategy_config={
                     "genetic_num_iters": 10,
                 },
