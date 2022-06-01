@@ -51,6 +51,9 @@ class IRDocsifierNode : public Object {
   TVM_DECLARE_FINAL_OBJECT_INFO(IRDocsifierNode, Object);
 
  public:
+  /*!
+   * \brief Transform the input object into TDoc
+   */
   template <class TDoc>
   TDoc AsDoc(const ObjectRef& obj) const {
     return Downcast<TDoc>(AsDocImpl(obj));
@@ -58,11 +61,23 @@ class IRDocsifierNode : public Object {
 
   ExprDoc AsExprDoc(const ObjectRef& ref) { return AsDoc<ExprDoc>(ref); }
 
+  /*!
+   * \brief Push a new dispatch token into the stack
+   * \details The top dispatch token decides which dispatch table to use
+   *          when printing Object. This method returns a RAII guard which
+   *          pops the token when going out of the scope.
+   */
   WithCtx WithDispatchToken(const String& token) {
     this->dispatch_tokens.push_back(token);
     return WithCtx(nullptr, [this]() { this->dispatch_tokens.pop_back(); });
   }
 
+  /*!
+   * \brief Push a new frame the stack
+   * \details Frame contains the contextual information that's needed during printing,
+   *          for example, variables in the scope. This method returns a RAII guard which
+   *          pops the frame and call the cleanup method of frame when going out of the scope.
+   */
   WithCtx WithFrame(const Frame& frame) {
     frame->EnterWithScope();
     this->frames.push_back(frame);
@@ -73,6 +88,9 @@ class IRDocsifierNode : public Object {
     });
   }
 
+  /*!
+   * \brief Get the top frame with type FrameType
+   */
   template <typename FrameType>
   Optional<FrameType> GetFrame() const;
 

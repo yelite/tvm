@@ -32,9 +32,7 @@ class FrameNode : public Object {
   Array<ObjectRef> objs;
   SymbolTableNode* sym;
 
-  void VisitAttrs(tvm::AttrVisitor* v) {
-    v->Visit("objs", &objs);
-  }
+  void VisitAttrs(tvm::AttrVisitor* v) { v->Visit("objs", &objs); }
 
   static constexpr const char* _type_key = "script.Frame";
   TVM_DECLARE_BASE_OBJECT_INFO(FrameNode, Object);
@@ -42,12 +40,22 @@ class FrameNode : public Object {
  public:
   virtual ~FrameNode() = default;
 
+  /*!
+   * \brief Set the name of a variable IR node
+   */
   virtual IdDoc DefByName(const ObjectRef& obj, const String& name) {
     IdDoc doc = sym->DefByName(obj, name);
     objs.push_back(obj);
     return doc;
   }
 
+  /*!
+   * \brief Set the doc of a variable IR node
+   * \details This is useful when the variable is implicitly defined in the TVMScript.
+   *          For example, when defining a `tir::Buffer buf`, buf->data is also a tir::Var,
+   *          which should be printed as `buf.data`, rather than an identifier
+   *          in the TVMScript.
+   */
   virtual ExprDoc DefByDoc(const ObjectRef& obj, const ExprDoc& doc) {
     sym->DefByDoc(obj, doc);
     objs.push_back(obj);
