@@ -165,7 +165,7 @@ void PythonDocPrinter::PrintTypedDoc(const CallDoc& doc) {
     } else {
       output_ << ", ";
     }
-    PrintStringLiteral(doc->kwargs_keys[i]);
+    output_ << doc->kwargs_keys[i];
     output_ << "=";
     PrintDoc(doc->kwargs_values[i]);
   }

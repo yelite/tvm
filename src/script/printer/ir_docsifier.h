@@ -56,7 +56,9 @@ class IRDocsifierNode : public Object {
    */
   template <class TDoc>
   TDoc AsDoc(const ObjectRef& obj) const {
-    return Downcast<TDoc>(AsDocImpl(obj));
+    auto result = Downcast<TDoc>(AsDocImpl(obj));
+    result->source = obj;
+    return result;
   }
 
   ExprDoc AsExprDoc(const ObjectRef& ref) { return AsDoc<ExprDoc>(ref); }
