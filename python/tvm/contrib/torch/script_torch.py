@@ -123,11 +123,11 @@ def tuning_relay(mod : tvm.ir.module.IRModule, params : Dict, config : TuneConfi
             work_dir=work_dir,
         )
         return rt_mod1
-          
+         
 def optimize_torch(
     func, 
     example_inputs, 
-    tuning_config, 
+    tuning_config = None, 
     dev = None, 
     target = None
 ):
@@ -167,7 +167,18 @@ def optimize_torch(
         pass 
     else: 
         target = llvm_target()
+    if tuning_config:
+        pass
+    else:
+        tuning_config = TuneConfig(
+                strategy="evolutionary",
+                num_trials_per_iter=8,
+                max_trials_per_task=16,
+                max_trials_global=16,
+            )
     jit_mod = torch.jit.trace(func, example_inputs)
+    if isinstance(example_inputs, torch.Tensor):
+        example_inputs = [example_inputs]
     shape_list = [(f"inp_{idx}", i.shape) for idx, i in enumerate(example_inputs)]
     mod, params = relay.frontend.from_pytorch(jit_mod, shape_list)
     mod_after_tuning = tuning_relay(mod, params, tuning_config, target)
