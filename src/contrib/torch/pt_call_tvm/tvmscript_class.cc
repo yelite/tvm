@@ -22,6 +22,7 @@
 #include <torch/script.h>
 #include <tvm/runtime/module.h>
 #include <tvm/runtime/registry.h>
+#include <tvm/target/codegen.h>
 #include <tvm/target/target.h>
 
 #include <map>
@@ -59,8 +60,8 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
       setter(k, &tensors[k]->dl_tensor);
     }
 
-    run.CallPacked(
-        tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
+    run.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length),
+                   nullptr);
 
     for (int k = 0; k < input_length; ++k) {
       tensors[k]->deleter(tensors[k]);
@@ -75,7 +76,7 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
  public:
   RelayRuntimeClass() { mod_ = ThreadLocalStore::ThreadLocal()->mod; }
 
-  at::Tensor forward(const c10::List<at::Tensor>& inputs) {
+  c10::List<at::Tensor> forward(const c10::List<at::Tensor>& inputs) {
     int input_length = inputs.size();
 
     std::vector<DLManagedTensor*> tensors;
@@ -85,6 +86,7 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     tvm::runtime::PackedFunc run = mod_.GetFunction("run");
     tvm::runtime::PackedFunc set_input = mod_.GetFunction("set_input");
     tvm::runtime::PackedFunc get_output = mod_.GetFunction("get_output");
+    tvm::runtime::PackedFunc get_num_outputs = mod_.GetFunction("get_num_outputs");
 
     for (int k = 0; k < input_length; ++k) {
       std::vector<TVMValue> tvm_values(input_length);
@@ -102,26 +104,41 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     std::vector<int> tvm_type_codes(input_length);
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
     setter(0, 0);
-    tvm::runtime::TVMRetValue ret;
+    tvm::runtime::TVMRetValue ret_output;
+    tvm::runtime::TVMRetValue ret_num_outputs;
 
-    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), &ret);
+    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1),
+                          &ret_output);
 
-    tvm::runtime::NDArray results = get_output(0);
+    get_num_outputs.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), &ret_num_outputs);
 
-    at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+    // TODO: need to check if output_length == 1
+    int64_t output_length = ret_num_outputs;
+
+    c10::List<at::Tensor> outputs;
+    outputs.reserve(output_length);
+
+    for (int k = 0; k < output_length; ++k) {
+      // TODO: need to check if we should use ret_output or get_output(0)
+      tvm::runtime::NDArray results = get_output(k);
+      at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+      outputs.emplace_back(atTensor);
+    }
 
     for (int k = 0; k < input_length; ++k) {
       tensors[k]->deleter(tensors[k]);
     }
-    return atTensor;
+    return outputs;
   }
 
   void SaveToFileCPU(const std::string& file_name, const std::string& format) {
-    auto x = static_cast<const tvm::runtime::*>(mod_.get())
+    LLVMModuleNode x = mod_;
+    x->SaveToFile(file_name, format);
   }
 
   void SaveToFileCUDA(const std::string& file_name, const std::string& format) {
-    LOG(INFO) << "save to file cuda";
+    CUDAModuleNode x = mod_;
+    x->SaveToFile(file_name, format);
   }
 
  private:
