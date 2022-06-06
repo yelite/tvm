@@ -17,22 +17,32 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+import pickle
 import torch
 import tvm
 from typing import List, Union, Callable, Dict
-import torch.utils.dlpack 
+import torch.utils.dlpack
+from tvm._ffi.runtime_ctypes import Device 
 from tvm.meta_schedule import TuneConfig
 import functools
 from tvm import relay
 import tempfile
 from tvm.meta_schedule.tune import tune_relay
+from pathlib import Path
+from tvm.runtime.module import load_module
 
 class TVMScriptRtModule(torch.nn.Module):
-    def __init__(self, module : tvm.runtime.Module):
+    def __init__(
+        self, 
+        module : tvm.runtime.Module,
+        device : Union[str, Device]
+    ):
         super().__init__()
         libpt_path = tvm.__path__[0] + "/../../build/libpt_tvmdsoop.so"
         torch.classes.load_library(libpt_path)
         self.__set_relay_module(module)
+        self.__device = device
+        # self.__rt_module = module
         
     def __set_relay_module(self, runtime_module):
         func = tvm.get_global_func("tvmtorch.save_runtime_mod")
@@ -42,7 +52,15 @@ class TVMScriptRtModule(torch.nn.Module):
         
     def forward(self, *torch_inputs : List[torch.Tensor]) -> List[torch.Tensor] :
         return self.engine.forward(torch_inputs)
-
+    
+    def save(self, file_name, fmt = ""):
+        if self.__device.device_type == 1: # CPU
+            self.engine.save_cpu(file_name, fmt)
+        elif self.__device.device_type == 2: # CUDA
+            self.engine.save_cuda(file_name, fmt)
+        else:
+            print(f"Device {self.__device} not supported.")
+        
 
 class TVMScriptIRModule(torch.nn.Module):
     def __init__(self, module : Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc, tvm.contrib.graph_executor.GraphModule]):
@@ -184,4 +202,7 @@ def optimize_torch(
     mod_after_tuning = tuning_relay(mod, params, tuning_config, target)
     rt_mod = mod_after_tuning["default"](dev)
     
-    return TVMScriptRtModule(rt_mod)
+    return TVMScriptRtModule(rt_mod, dev)
+
+def load_module():
+    pass

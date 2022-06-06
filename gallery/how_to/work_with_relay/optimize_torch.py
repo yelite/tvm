@@ -56,8 +56,8 @@ class SimpleModel(nn.Module):
 # ------------------------------  
 # We trace this module, then run the `optimize_for_inference` function from TorchScript
 simple_model = SimpleModel()
-example_input = torch.randn(1, 1, 10, 10)
-model_optimized_by_jit = torch.jit.trace(simple_model, example_input)
+example_input = torch.randn(20, 1, 10, 10)
+model_optimized_by_jit = torch.jit.optimize_for_inference(torch.jit.trace(simple_model, example_input))
 
 ######################################################################
 # Optimized SimpleModel by TVM MetaSchedule
@@ -73,9 +73,18 @@ tuning_config = TuneConfig(
                 max_trials_per_task=16,
                 max_trials_global=16,
             )
-# we instantiate another instance for avoiding conflict
-simple_model2 = SimpleModel()
-model_optimized_by_meta = optimize_torch(simple_model2, example_input, tuning_config)
+
+class SimpleModel2(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = optimize_torch(nn.Conv2d(1, 20, 5), torch.randn(20, 1, 10, 10))
+        self.conv2 = optimize_torch(nn.Conv2d(20, 20, 5), torch.randn(20, 20, 6, 6))
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        return F.relu(self.conv2(x))
+
+model_optimized_by_meta = SimpleModel2()
 
 ######################################################################
 # Compare the performance between two scheduling approaches.
@@ -84,7 +93,7 @@ model_optimized_by_meta = optimize_torch(simple_model2, example_input, tuning_co
 
 results = []
 for i in range(20):
-    test_input = torch.rand(1, 1, 10, 10)
+    test_input = torch.rand(20, 1, 10, 10)
     sub_label = f'[test {i}]'
     results.append(benchmark.Timer(
             stmt='model_optimized_by_meta(test_input)',

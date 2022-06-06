@@ -16,19 +16,20 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include <ATen/DLConvertor.h>
 #include <dlpack/dlpack.h>
 #include <torch/custom_class.h>
 #include <torch/script.h>
-#include <tvm/runtime/registry.h>
 #include <tvm/runtime/module.h>
-#include <ATen/DLConvertor.h>
+#include <tvm/runtime/registry.h>
+#include <tvm/target/target.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 namespace tvm {
 namespace contrib {
-
 
 struct ThreadLocalStore {
   tvm::runtime::Module mod;
@@ -40,20 +41,16 @@ struct ThreadLocalStore {
 
 class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
  public:
-  TVMScriptRuntimeClass() {
-    mod_ = ThreadLocalStore::ThreadLocal() -> mod;
-  }
+  TVMScriptRuntimeClass() { mod_ = ThreadLocalStore::ThreadLocal()->mod; }
 
   void forward(const c10::List<at::Tensor>& inputs) {
-
-
     int input_length = inputs.size();
 
     std::vector<DLManagedTensor*> tensors;
 
     for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
 
-    tvm::runtime::PackedFunc rt_func = mod_.GetFunction("__tvm_main__");
+    tvm::runtime::PackedFunc run = mod_.GetFunction("__tvm_main__");
 
     std::vector<TVMValue> tvm_values(input_length);
     std::vector<int> tvm_type_codes(input_length);
@@ -62,77 +59,73 @@ class TVMScriptRuntimeClass : public torch::jit::CustomClassHolder {
       setter(k, &tensors[k]->dl_tensor);
     }
 
-    rt_func.CallPacked(
+    run.CallPacked(
         tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), input_length), nullptr);
 
     for (int k = 0; k < input_length; ++k) {
-      // LOG(INFO) << "del: " << static_cast<ATenDLMTensor*>(tensors[k]->manager_ctx);
       tensors[k]->deleter(tensors[k]);
     }
   }
 
-
  private:
-
   tvm::runtime::Module mod_;
-
 };
 
 class RelayRuntimeClass : public torch::jit::CustomClassHolder {
  public:
-  RelayRuntimeClass() {
-
-    mod_ = ThreadLocalStore::ThreadLocal() -> mod;
-  }
+  RelayRuntimeClass() { mod_ = ThreadLocalStore::ThreadLocal()->mod; }
 
   at::Tensor forward(const c10::List<at::Tensor>& inputs) {
+    int input_length = inputs.size();
 
-      int input_length = inputs.size();
+    std::vector<DLManagedTensor*> tensors;
 
-      std::vector<DLManagedTensor*> tensors;
+    for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
 
-      for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
+    tvm::runtime::PackedFunc run = mod_.GetFunction("run");
+    tvm::runtime::PackedFunc set_input = mod_.GetFunction("set_input");
+    tvm::runtime::PackedFunc get_output = mod_.GetFunction("get_output");
 
-      tvm::runtime::PackedFunc rt_func = mod_.GetFunction("run");
-      tvm::runtime::PackedFunc set_input = mod_.GetFunction("set_input");
-      tvm::runtime::PackedFunc get_output = mod_.GetFunction("get_output");
-
-      
-      for (int k = 0; k < input_length; ++k) {
-        std::vector<TVMValue> tvm_values(input_length);
-        std::vector<int> tvm_type_codes(input_length);
-        tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-        setter(0, k);
-        setter(1, &tensors[k]->dl_tensor);
-        set_input.CallPacked(
-          tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 2), nullptr);
-      }
-
-      rt_func.CallPacked(
-        tvm::runtime::TVMArgs(NULL, NULL, 0), nullptr);
-
+    for (int k = 0; k < input_length; ++k) {
       std::vector<TVMValue> tvm_values(input_length);
       std::vector<int> tvm_type_codes(input_length);
       tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-      setter(0, 0);
-      tvm::runtime::TVMRetValue ret;
+      setter(0, k);
+      setter(1, &tensors[k]->dl_tensor);
+      set_input.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 2),
+                           nullptr);
+    }
 
-      get_output.CallPacked(
-        tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), &ret);
+    run.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), nullptr);
 
-      tvm::runtime::NDArray results = get_output(0);
+    std::vector<TVMValue> tvm_values(input_length);
+    std::vector<int> tvm_type_codes(input_length);
+    tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
+    setter(0, 0);
+    tvm::runtime::TVMRetValue ret;
 
-      
-      at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), &ret);
 
-      return atTensor;
+    tvm::runtime::NDArray results = get_output(0);
+
+    at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+
+    for (int k = 0; k < input_length; ++k) {
+      tensors[k]->deleter(tensors[k]);
+    }
+    return atTensor;
   }
 
+  void SaveToFileCPU(const std::string& file_name, const std::string& format) {
+    auto x = static_cast<const tvm::runtime::*>(mod_.get())
+  }
+
+  void SaveToFileCUDA(const std::string& file_name, const std::string& format) {
+    LOG(INFO) << "save to file cuda";
+  }
 
  private:
-
   tvm::runtime::Module mod_;
-
 };
 
 TVM_REGISTER_GLOBAL("tvmtorch.save_runtime_mod").set_body_typed([](tvm::runtime::Module mod) {
@@ -141,15 +134,17 @@ TVM_REGISTER_GLOBAL("tvmtorch.save_runtime_mod").set_body_typed([](tvm::runtime:
 
 TORCH_LIBRARY(tvm_torch, m) {
   m.class_<TVMScriptRuntimeClass>("TVMScriptRuntime")
-  .def(torch::init<>())
-  .def("forward", &TVMScriptRuntimeClass::forward);
+      .def(torch::init<>())
+      .def("forward", &TVMScriptRuntimeClass::forward);
 }
 
 TORCH_LIBRARY(tvm_tuning, m) {
   m.class_<RelayRuntimeClass>("RelayRuntime")
-  .def(torch::init<>())
-  .def("forward", &RelayRuntimeClass::forward);
+      .def(torch::init<>())
+      .def("save_cpu", &RelayRuntimeClass::SaveToFileCPU)
+      .def("save_cuda", &RelayRuntimeClass::SaveToFileCUDA)
+      .def("forward", &RelayRuntimeClass::forward);
 }
 
-}
-}
+}  // namespace contrib
+}  // namespace tvm
