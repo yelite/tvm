@@ -115,6 +115,8 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     // TODO: need to check if output_length == 1
     int64_t output_length = ret_num_outputs;
 
+    LOG(INFO) << output_length;
+
     c10::List<at::Tensor> outputs;
     outputs.reserve(output_length);
 
@@ -132,13 +134,19 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
   }
 
   void SaveToFileCPU(const std::string& file_name, const std::string& format) {
+    /*  this code is what we want to try:
+
     LLVMModuleNode x = mod_;
     x->SaveToFile(file_name, format);
+
+    */
+
+    mod_->SaveToFile(file_name, format);
   }
 
   void SaveToFileCUDA(const std::string& file_name, const std::string& format) {
-    CUDAModuleNode x = mod_;
-    x->SaveToFile(file_name, format);
+    // CUDAModuleNode x = mod_;
+    // x->SaveToFile(file_name, format);
   }
 
  private:

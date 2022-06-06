@@ -40,7 +40,7 @@ class TVMScriptRtModule(torch.nn.Module):
         device: Union[str, Device]
     ):
         super().__init__()
-        libpt_path = find_lib_path("libpt_tvmdsoop.so")
+        libpt_path = find_lib_path("libpt_tvmdsoop.so")[0]
         torch.classes.load_library(libpt_path)
         self.__set_relay_module(module)
         self.__device = device
@@ -67,7 +67,7 @@ class TVMScriptRtModule(torch.nn.Module):
 class TVMScriptIRModule(torch.nn.Module):
     def __init__(self, module: Union[tvm.ir.module.IRModule, tvm.tir.function.PrimFunc, tvm.contrib.graph_executor.GraphModule]):
         super().__init__()
-        libpt_path = find_lib_path("libpt_tvmdsoop.so")
+        libpt_path = find_lib_path("libpt_tvmdsoop.so")[0]
         torch.classes.load_library(libpt_path)
         self.engine_cpu = None
         self.engine_cuda = None
