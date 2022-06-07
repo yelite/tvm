@@ -3,6 +3,8 @@ import torch
 from tvm.contrib.torch import optimize_torch, load_module
 import torch.nn.functional as F
 
+from tvm.meta_schedule.tune import TuneConfig
+
 
 class SimpleModel(torch.nn.Module):
     def __init__(self):
@@ -15,6 +17,19 @@ class SimpleModel(torch.nn.Module):
         return F.relu(self.conv2(x))
 
 
-simpleModel = optimize_torch(SimpleModel(), torch.randn(20, 1, 10, 10))
+tuning_config = TuneConfig(
+    strategy="evolutionary",
+    num_trials_per_iter=2,
+    max_trials_per_task=4,
+    max_trials_global=4,
+)
 
-simpleModel.save("simple.pt")
+simpleModel = optimize_torch(
+    SimpleModel(), torch.randn(20, 1, 10, 10), tuning_config)
+
+
+test_input = torch.randn(20, 1, 10, 10)
+
+ret = simpleModel(test_input)
+
+print(ret)

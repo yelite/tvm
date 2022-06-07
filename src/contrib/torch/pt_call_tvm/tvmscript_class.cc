@@ -104,24 +104,18 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     std::vector<int> tvm_type_codes(input_length);
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
     setter(0, 0);
-    tvm::runtime::TVMRetValue ret_output;
     tvm::runtime::TVMRetValue ret_num_outputs;
 
-    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1),
-                          &ret_output);
+    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), NULL);
 
     get_num_outputs.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), &ret_num_outputs);
 
-    // TODO: need to check if output_length == 1
     int64_t output_length = ret_num_outputs;
-
-    LOG(INFO) << output_length;
 
     c10::List<at::Tensor> outputs;
     outputs.reserve(output_length);
 
     for (int k = 0; k < output_length; ++k) {
-      // TODO: need to check if we should use ret_output or get_output(0)
       tvm::runtime::NDArray results = get_output(k);
       at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
       outputs.emplace_back(atTensor);

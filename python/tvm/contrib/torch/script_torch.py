@@ -52,8 +52,12 @@ class TVMScriptRtModule(torch.nn.Module):
 
         self.engine = torch.classes.tvm_tuning.RelayRuntime()
 
-    def forward(self, *torch_inputs: List[torch.Tensor]) -> List[torch.Tensor]:
-        return self.engine.forward(torch_inputs)
+    def forward(self, *torch_inputs: List[torch.Tensor]):
+        ret = self.engine.forward(torch_inputs)
+        if len(ret) == 1:
+            return ret[0]
+        else:
+            return ret
 
     def save(self, file_name, fmt=""):
         if self.__device.device_type == 1:  # CPU
