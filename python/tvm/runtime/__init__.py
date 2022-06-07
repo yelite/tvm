@@ -20,6 +20,7 @@
 from .packed_func import PackedFunc
 from .object import Object
 from .object_generic import ObjectGeneric, ObjectTypes
+from .object_path import ObjectPath
 from .ndarray import NDArray, DataType, DataTypeCode, Device
 from .module import Module, num_threads
 from .profiling import Report

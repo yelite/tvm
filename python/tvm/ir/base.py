@@ -209,6 +209,17 @@ def structural_equal(lhs, rhs, map_free_vars=False):
     return bool(tvm.runtime._ffi_node_api.StructuralEqual(lhs, rhs, False, map_free_vars))
 
 
+def get_first_structural_mismatch(lhs, rhs, map_free_vars=False):
+    lhs = tvm.runtime.convert(lhs)
+    rhs = tvm.runtime.convert(rhs)
+    mismatch = tvm.runtime._ffi_node_api.GetFirstStructuralMismatch(lhs, rhs, map_free_vars)
+    if len(mismatch) == 0:
+        return None
+    else:
+        assert len(mismatch) == 2
+        return tuple(mismatch)
+
+
 def assert_structural_equal(lhs, rhs, map_free_vars=False):
     """Assert lhs and rhs are structurally equal to each other.
 
