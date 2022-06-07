@@ -105,8 +105,10 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
     setter(0, 0);
     tvm::runtime::TVMRetValue ret_num_outputs;
+    tvm::runtime::TVMRetValue ret_output;
 
-    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1), NULL);
+    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1),
+                          &ret_output);
 
     get_num_outputs.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), &ret_num_outputs);
 
