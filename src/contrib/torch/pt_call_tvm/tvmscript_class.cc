@@ -88,31 +88,16 @@ class RelayRuntimeClass : public torch::jit::CustomClassHolder {
     tvm::runtime::PackedFunc get_output = mod_.GetFunction("get_output");
     tvm::runtime::PackedFunc get_num_outputs = mod_.GetFunction("get_num_outputs");
 
-    for (int k = 0; k < input_length; ++k) {
-      std::vector<TVMValue> tvm_values(input_length);
-      std::vector<int> tvm_type_codes(input_length);
-      tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-      setter(0, k);
-      setter(1, &tensors[k]->dl_tensor);
-      set_input.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 2),
-                           nullptr);
-    }
-
-    run.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), nullptr);
-
     std::vector<TVMValue> tvm_values(input_length);
     std::vector<int> tvm_type_codes(input_length);
-    tvm::runtime::TVMArgsSetter setter(tvm_values.data(), tvm_type_codes.data());
-    setter(0, 0);
-    tvm::runtime::TVMRetValue ret_num_outputs;
-    tvm::runtime::TVMRetValue ret_output;
 
-    get_output.CallPacked(tvm::runtime::TVMArgs(tvm_values.data(), tvm_type_codes.data(), 1),
-                          &ret_output);
+    for (int k = 0; k < input_length; ++k) {
+      set_input(k, &tensors[k]->dl_tensor);
+    }
 
-    get_num_outputs.CallPacked(tvm::runtime::TVMArgs(NULL, NULL, 0), &ret_num_outputs);
+    run();
 
-    int64_t output_length = ret_num_outputs;
+    int64_t output_length = get_num_outputs();
 
     c10::List<at::Tensor> outputs;
     outputs.reserve(output_length);
