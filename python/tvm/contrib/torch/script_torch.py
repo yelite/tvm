@@ -18,19 +18,32 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import functools
+import tempfile
+from typing import Callable, Dict, List, Union
+
 import torch
-import tvm
-from typing import List, Union, Callable, Dict
 import torch.utils.dlpack
+
+import tvm
+from tvm import relay
+from tvm._ffi.libinfo import find_lib_path
 from tvm._ffi.runtime_ctypes import Device
 from tvm.meta_schedule import TuneConfig
-import functools
-from tvm import relay
-import tempfile
 from tvm.meta_schedule.tune import tune_relay
-from pathlib import Path
-from tvm.runtime.module import load_module
-from tvm._ffi.libinfo import find_lib_path
+
+
+_integration_initialized = False
+
+
+def _init_pytorch_integration():
+    global _integration_initialized
+    if _integration_initialized:
+        return
+
+    libpt_path = find_lib_path("libpt_tvmdsoop.so")[0]
+    torch.classes.load_library(libpt_path)
+    _integration_initialized = True
 
 
 class TVMScriptRtModule(torch.nn.Module):
@@ -185,6 +198,8 @@ def optimize_torch(
     mod : TVMScriptRtModule
         It will return an object of TVMScriptRtModule, which is the subclass of the original nn.Module.
     """
+    _init_pytorch_integration()
+
     if dev:
         pass
     else:
@@ -200,7 +215,7 @@ def optimize_torch(
             strategy="evolutionary",
             num_trials_per_iter=8,
             max_trials_per_task=16,
-            max_trials_global=16,
+            max_trials_global=0,
         )
     jit_mod = torch.jit.trace(func, example_inputs)
     if isinstance(example_inputs, torch.Tensor):
@@ -208,11 +223,8 @@ def optimize_torch(
     shape_list = [(f"inp_{idx}", i.shape)
                   for idx, i in enumerate(example_inputs)]
     mod, params = relay.frontend.from_pytorch(jit_mod, shape_list)
-    mod_after_tuning = tuning_relay(mod, params, tuning_config, target)
-    rt_mod = mod_after_tuning["default"](dev)
+    executor_factory = tuning_relay(mod, params, tuning_config, target)
+    save_runtime_mod = tvm.get_global_func("tvmtorch.save_runtime_mod")
+    save_runtime_mod(executor_factory.module)
+    return torch.classes.tvm_tuning.RelayRuntime()
 
-    return TVMScriptRtModule(rt_mod, dev)
-
-
-def load_module():
-    pass

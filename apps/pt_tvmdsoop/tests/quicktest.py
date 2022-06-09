@@ -1,6 +1,6 @@
 import tvm
 import torch
-from tvm.contrib.torch import optimize_torch, load_module
+from tvm.contrib.torch import optimize_torch
 import torch.nn.functional as F
 
 from tvm.meta_schedule.tune import TuneConfig
@@ -21,15 +21,18 @@ tuning_config = TuneConfig(
     strategy="evolutionary",
     num_trials_per_iter=2,
     max_trials_per_task=4,
-    max_trials_global=4,
+    max_trials_global=0,
 )
 
-simpleModel = optimize_torch(
+rt_mod = optimize_torch(
     SimpleModel(), torch.randn(20, 1, 10, 10), tuning_config)
 
 
 test_input = torch.randn(20, 1, 10, 10)
 
-ret = simpleModel(test_input)
+ret = rt_mod.forward((test_input,))
 
+torch.save(rt_mod, "test.pt")
+loaded_model = torch.load("test.pt")
+ret = loaded_model.forward((test_input,))
 print(ret)

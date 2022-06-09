@@ -56,4 +56,3 @@ as_torch = script_torch.as_torch
 TVMScriptRtModule = script_torch.TVMScriptRtModule
 TVMScriptIRModule = script_torch.TVMScriptIRModule
 optimize_torch = script_torch.optimize_torch
-load_module = script_torch.load_module
