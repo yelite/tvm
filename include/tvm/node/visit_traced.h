@@ -16,32 +16,18 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#include <tvm/runtime/container/array.h>
 
-/*!
- * \file tir/ir/functor_common.h
- * \brief Common utils for implementing functors
- */
-#ifndef TVM_TIR_IR_FUNCTOR_COMMON_H_
-#define TVM_TIR_IR_FUNCTOR_COMMON_H_
+#ifndef TVM_VISIT_TRACED_H_
+#define TVM_VISIT_TRACED_H_
+
+#include <tvm/node/traced_object.h>
 
 namespace tvm {
-namespace tir {
 
-// Implementation of Visitors
-template <typename Arr, typename F>
-inline void VisitArray(const Arr& arr, F fvisit) {
-  for (size_t i = 0; i < arr.size(); i++) {
-    fvisit(arr[i]);
-  }
-}
+void PostOrderVisitTraced(const TracedObject<ObjectRef>& object,
+                          const std::function<bool(const ObjectRef&)>& node_predicate,
+                          const std::function<void(const TracedObject<ObjectRef>&)>& callback);
 
-template <typename T, typename F>
-inline Array<T> MutateArray(Array<T> arr, F fmutate) {
-  arr.MutateByApply(fmutate);
-  return arr;
-}
-
-}  // namespace tir
 }  // namespace tvm
-#endif  // TVM_TIR_IR_FUNCTOR_COMMON_H_
+
+#endif  // TVM_VISIT_TRACED_H_

@@ -21,6 +21,7 @@
 
 #include <tvm/ir/expr.h>
 #include <tvm/node/node.h>
+#include <tvm/node/traced_object.h>
 
 namespace tvm {
 namespace script {
@@ -31,6 +32,7 @@ namespace printer {
 class DocNode : public Object {
  public:
   mutable Optional<ObjectRef> source{NullOpt};
+  mutable Array<ObjectPath> paths;
 
   void VisitAttrs(AttrVisitor* v) { v->Visit("source", &source); }
 
@@ -64,6 +66,8 @@ class ExprDocNode : public DocNode {
 
  public:
   AttrAccessDoc Attr(String attr) const;
+  AttrAccessDoc Attr(TracedObject<String> attr) const;
+  AttrAccessDoc Attr(TracedBasicValue<const char*> attr) const;
   IndexDoc Index(Array<Doc> indices) const;
   CallDoc Call(Array<ExprDoc, void> args) const;
   CallDoc Call(Array<ExprDoc, void> args,        //
@@ -145,15 +149,20 @@ class LiteralDocNode : public ExprDocNode {
 
 class LiteralDoc : public ExprDoc {
  protected:
-  explicit LiteralDoc(ObjectRef value);
+  explicit LiteralDoc(ObjectRef value, ObjectPath path);
 
  public:
-  static LiteralDoc None() { return LiteralDoc(ObjectRef(nullptr)); }
-  static LiteralDoc Int(IntImm v) { return LiteralDoc(v); }
-  static LiteralDoc Int(int64_t v) { return LiteralDoc(IntImm(DataType::Int(64), v)); }
-  static LiteralDoc Bool(Bool v) { return LiteralDoc(v); }
-  static LiteralDoc Float(FloatImm v) { return LiteralDoc(v); }
-  static LiteralDoc Str(String v) { return LiteralDoc(v); }
+  static LiteralDoc None(const ObjectPath& path) { return LiteralDoc(ObjectRef(nullptr), path); }
+  static LiteralDoc Int(const TracedObject<IntImm>& v) { return LiteralDoc(v.Get(), v.GetPath()); }
+  static LiteralDoc Int(const TracedBasicValue<int>& v) {
+    return LiteralDoc(IntImm(DataType::Int(64), v.Get()), v.GetPath());
+  }
+  static LiteralDoc Bool(Bool v) { return LiteralDoc(v, {}); }
+  static LiteralDoc Float(const TracedObject<FloatImm>& v) {
+    return LiteralDoc(v.Get(), v.GetPath());
+  }
+  static LiteralDoc Str(const String& v) { return LiteralDoc(v, {}); }
+  static LiteralDoc Str(const TracedObject<String>& v) { return LiteralDoc(v.Get(), v.GetPath()); }
 
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(LiteralDoc, ExprDoc, LiteralDocNode);
 };
@@ -572,6 +581,18 @@ namespace printer {
 
 inline AttrAccessDoc ExprDocNode::Attr(String attr) const {
   return AttrAccessDoc(GetRef<ExprDoc>(this), attr);
+}
+
+inline AttrAccessDoc ExprDocNode::Attr(TracedObject<String> attr) const {
+  AttrAccessDoc ret(GetRef<ExprDoc>(this), attr.Get());
+  ret->paths.push_back(attr.GetPath());
+  return ret;
+}
+
+inline AttrAccessDoc ExprDocNode::Attr(TracedBasicValue<const char*> attr) const {
+  AttrAccessDoc ret(GetRef<ExprDoc>(this), attr.Get());
+  ret->paths.push_back(attr.GetPath());
+  return ret;
 }
 
 inline IndexDoc ExprDocNode::Index(Array<Doc> indices) const {

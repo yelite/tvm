@@ -31,28 +31,26 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-using FTVMScriptOpSugar = runtime::TypedPackedFunc<ExprDoc(tir::Call, IRDocsifier)>;
 constexpr const char kFTVMScriptOpSugarKey[] = "FTVMScriptOpSugar";
 
-ExprDoc PrintOpCall(tir::Call call, IRDocsifier p) {
-  static auto op_sugar_map = Op::GetAttrMap<FTVMScriptOpSugar>(kFTVMScriptOpSugarKey);
+ExprDoc PrintOpCall(TracedObject<tir::Call> call, IRDocsifier p) {
+  static auto op_sugar_map = Op::GetAttrMap<String>(kFTVMScriptOpSugarKey);
+  auto op = call.GetAttr<Op>("op");
+  auto args = call.GetAttr<Array<PrimExpr>>("args");
 
-  const auto op = Downcast<Op>(call->op);
-
-  if (op_sugar_map.count(op)) {
-    return op_sugar_map[op](call, p);
+  if (op_sugar_map.count(op.Get())) {
+    auto name_str = MakeTraced(op_sugar_map[op.Get()], op.GetPath());
+    return TIR(p)->Attr(name_str)->Call(AsExprDocArray(args, p), {}, {});
   } else {
-    Array<ExprDoc> args{LiteralDoc::Str(op->name)};
-    args = Concat(args, AsExprDocArray(call->args, p));
-    return TIR(p)->Attr("call")->Call(args);
+    auto op_name = op.GetAttr<String>("name");
+    Array<ExprDoc> arg_docs{LiteralDoc::Str(op_name)};
+    arg_docs = Concat(arg_docs, AsExprDocArray(args, p));
+    return TIR(p)->Attr("call")->Call(arg_docs);
   }
 }
 
-#define TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT(name)                                                 \
-  TVM_REGISTER_OP("tir." #name)                                                               \
-      .set_attr<FTVMScriptOpSugar>(kFTVMScriptOpSugarKey, [](tir::Call call, IRDocsifier p) { \
-        return TIR(p)->Attr(#name)->Call(AsExprDocArray(call->args, p));                      \
-      })
+#define TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT(name) \
+  TVM_REGISTER_OP("tir." #name).set_attr<String>(kFTVMScriptOpSugarKey, String(#name))
 
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("trunc");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("exp");

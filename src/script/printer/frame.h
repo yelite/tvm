@@ -43,11 +43,13 @@ class FrameNode : public Object {
   /*!
    * \brief Set the name of a variable IR node
    */
-  virtual IdDoc DefByName(const ObjectRef& obj, const String& name) {
-    IdDoc doc = sym->DefByName(obj, name);
+  virtual IdDoc DefByName(const ObjectRef& obj, const TracedObject<String>& name_prefix) {
+    IdDoc doc = sym->DefByName(obj, name_prefix);
     objs.push_back(obj);
     return doc;
   }
+
+  using DocFactory = std::function<ExprDoc(ObjectPath)>;
 
   /*!
    * \brief Set the doc of a variable IR node
@@ -56,10 +58,9 @@ class FrameNode : public Object {
    *          which should be printed as `buf.data`, rather than an identifier
    *          in the TVMScript.
    */
-  virtual ExprDoc DefByDoc(const ObjectRef& obj, const ExprDoc& doc) {
-    sym->DefByDoc(obj, doc);
+  virtual void DefByDoc(const ObjectRef& obj, DocFactory&& doc_factory) {
+    sym->DefByDoc(obj, doc_factory);
     objs.push_back(obj);
-    return doc;
   }
 
   virtual void EnterWithScope() {}

@@ -17,7 +17,6 @@
  * under the License.
  */
 #include "./ir_docsifier.h"
-
 #include "tvm/runtime/container/base.h"
 
 namespace tvm {

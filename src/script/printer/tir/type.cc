@@ -18,6 +18,7 @@
  */
 #include <tvm/ir/type.h>
 
+#include "../util.h"
 #include "./utils.h"
 
 namespace tvm {
@@ -25,32 +26,37 @@ namespace script {
 namespace printer {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<PrimType>("tir", [](PrimType ty, IRDocsifier p) -> Doc {
-      using runtime::DLDataType2String;
-      return TIR(p)->Attr(DLDataType2String(ty->dtype));
+    .set_dispatch<PrimType>("tir", [](PrimType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
+      auto ty = MakeTraced(raw_ty, path);
+      auto dtype = ty.GetAttr<DataType>("dtype");
+      String ty_str = runtime::DLDataType2String(dtype.Get());
+      return TIR(p)->Attr(MakeTraced(ty_str, ty.GetPath()));
     });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<PointerType>("tir", [](PointerType ty, IRDocsifier p) -> Doc {
-      ExprDoc element_type = p->AsDoc<ExprDoc>(ty->element_type);
-      if (ty->storage_scope.empty()) {
-        return TIR(p)->Attr("Ptr")->Call({element_type});
-      } else {
-        return TIR(p)->Attr("Ptr")->Call({element_type, LiteralDoc::Str(ty->storage_scope)});
-      }
-    });
+    .set_dispatch<PointerType>(
+        "tir", [](PointerType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
+          auto ty = MakeTraced(raw_ty, path);
+          auto element_type = ty.GetAttr<Type>("element_type");
+          auto storage_scope = ty.GetAttr<String>("storage_scope");
+
+          ExprDoc element_type_doc = p->AsDoc<ExprDoc>(element_type);
+          if (storage_scope.Get().empty()) {
+            return TIR(p)->Attr("Ptr")->Call({element_type_doc});
+          } else {
+            return TIR(p)->Attr("Ptr")->Call({element_type_doc, LiteralDoc::Str(storage_scope)});
+          }
+        });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<TupleType>("tir", [](TupleType ty, IRDocsifier p) -> Doc {
-      if (ty->fields.empty()) {
-        return LiteralDoc::None();
+    .set_dispatch<TupleType>("tir", [](TupleType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
+      auto ty = MakeTraced(raw_ty, path);
+      auto fields = ty.GetAttr<Array<Type>>("fields");
+
+      if (fields.empty()) {
+        return LiteralDoc::None(fields.GetPath());
       }
-      Array<ExprDoc> types;
-      types.reserve(ty->fields.size());
-      for (auto field : ty->fields) {
-        types.push_back(p->AsDoc<ExprDoc>(field));
-      }
-      return TIR(p)->Attr("Tuple")->Call(types);
+      return TIR(p)->Attr("Tuple")->Call(AsExprDocArray(fields, p));
     });
 
 }  // namespace printer

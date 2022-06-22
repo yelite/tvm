@@ -27,19 +27,240 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-String DocPrinter::Print(Doc doc) { return Print(Array<Doc>({doc})); }
+namespace {
 
-String DocPrinter::Print(Array<Doc> docs) {
-  output_.str("");
-  for (const Doc& doc : docs) {
-    PrintDoc(doc);
+void SortAndMergeSpans(std::vector<ByteSpan>& spans) {
+  if (spans.empty()) {
+    return;
   }
-  std::string result = output_.str();
+
+  std::sort(spans.begin(), spans.end());
+  auto last = spans.begin();
+  for (auto cur = spans.begin() + 1; cur != spans.end(); ++cur) {
+    if (cur->first > last->second) {
+      *++last = *cur;
+    } else if (cur->second > last->second) {
+      last->second = cur->second;
+    }
+  }
+
+  spans.erase(++last, spans.end());
+}
+
+size_t GetTextWidth(const std::string& text, const ByteSpan& span) {
+  // FIXME: this only works for ASCII characters.
+  // To do this "correctly", we need to parse UTF-8 into codepoints
+  // and call wcwidth() or equivalent for every codepoint.
+  size_t ret = 0;
+  for (size_t i = span.first; i != span.second; ++i) {
+    if (isprint(text[i])) {
+      ret += 1;
+    }
+  }
+  return ret;
+}
+
+size_t MoveBack(size_t pos, size_t distance) { return distance > pos ? 0 : pos - distance; }
+
+size_t MoveForward(size_t pos, size_t distance, size_t max) {
+  return distance > max - pos ? max : pos + distance;
+}
+
+size_t GetLineIndex(size_t byte_pos, const std::vector<size_t>& line_starts) {
+  auto it = std::upper_bound(line_starts.begin(), line_starts.end(), byte_pos);
+  return (it - line_starts.begin()) - 1;
+}
+
+using HighlightIter = typename std::vector<ByteSpan>::const_iterator;
+
+ByteSpan PopNextHighlight(HighlightIter& next_highlight, HighlightIter end_highlight) {
+  if (next_highlight == end_highlight) {
+    return {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
+  } else {
+    return *next_highlight++;
+  }
+}
+
+void PrintChunk(const std::pair<size_t, size_t>& lines,
+                const std::pair<HighlightIter, HighlightIter>& highlights, const std::string& text,
+                const std::vector<size_t>& line_starts, const DocPrinterOptions& options,
+                std::string& out) {
+  std::ostringstream line_num_printer;
+
+  HighlightIter next_highlight = highlights.first;
+  ByteSpan current_highlight = PopNextHighlight(next_highlight, highlights.second);
+
+  for (size_t line_idx = lines.first; line_idx < lines.second; ++line_idx) {
+    size_t line_number_width = 0;
+    if (options.print_line_numbers) {
+      line_num_printer.str("");
+      line_num_printer << (line_idx + 1);
+      line_num_printer << ' ';
+      std::string line_num_str = line_num_printer.str();
+      line_number_width = line_num_str.size();
+    }
+
+    size_t line_start = line_starts.at(line_idx);
+    size_t line_end =
+        line_idx + 1 == line_starts.size() ? text.size() : line_starts.at(line_idx + 1);
+    out.append(text.begin() + line_start, text.begin() + line_end);
+
+    bool printed_highlight = false;
+    size_t line_pos = line_start;
+    bool printed_extra_caret = 0;
+    while (current_highlight.first < line_end) {
+      if (!printed_highlight) {
+        out += std::string(line_number_width, ' ');
+        printed_highlight = true;
+      }
+
+      size_t highlight_end_for_line = std::min(line_end, current_highlight.second);
+
+      size_t num_spaces = GetTextWidth(text, {line_pos, current_highlight.first});
+      if (num_spaces > 0 && printed_extra_caret) {
+        num_spaces -= 1;
+        printed_extra_caret = false;
+      }
+      out += std::string(num_spaces, ' ');
+
+      size_t num_carets = GetTextWidth(text, {current_highlight.first, highlight_end_for_line});
+      if (num_carets == 0 && !printed_extra_caret) {
+        // Special case: when highlighting an empty or unprintable string, make sure to print
+        // at least one caret still.
+        num_carets = 1;
+        printed_extra_caret = true;
+      } else if (num_carets > 0 && printed_extra_caret) {
+        num_carets -= 1;
+        printed_extra_caret = false;
+      }
+      out += std::string(num_carets, '^');
+
+      line_pos = current_highlight.first = highlight_end_for_line;
+      if (current_highlight.first == current_highlight.second) {
+        current_highlight = PopNextHighlight(next_highlight, highlights.second);
+      }
+    }
+
+    if (printed_highlight) {
+      out.push_back('\n');
+    }
+  }
+}
+
+void PrintCut(size_t num_lines_skipped, std::string& out) {
+  if (num_lines_skipped != 0) {
+    std::ostringstream s;
+    s << "(... " << num_lines_skipped << " lines skipped ...)\n";
+    out += s.str();
+  }
+}
+
+std::pair<size_t, size_t> GetLinesForHighlight(const ByteSpan& highlight,
+                                               const std::vector<size_t>& line_starts,
+                                               const DocPrinterOptions& options) {
+  size_t first_line_of_highlight = GetLineIndex(highlight.first, line_starts);
+  size_t first_line_of_chunk = MoveBack(first_line_of_highlight, options.num_context_lines);
+  size_t end_line_of_highlight = GetLineIndex(highlight.second - 1, line_starts) + 1;
+  size_t end_line_of_chunk =
+      MoveForward(end_line_of_highlight, options.num_context_lines, line_starts.size());
+
+  return {first_line_of_chunk, end_line_of_chunk};
+}
+
+// If there is only one line between the chunks, it is better to print it as is,
+// rather than something like "(... 1 line skipped ...)".
+constexpr const size_t kMinLinesToCutOut = 1;
+
+bool TryMergeChunks(std::pair<size_t, size_t>& cur_chunk,
+                    const std::pair<size_t, size_t>& new_chunk) {
+  if (new_chunk.first <= cur_chunk.second + kMinLinesToCutOut) {
+    cur_chunk.second = new_chunk.second;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+std::string DecorateText(const std::string& text, const std::vector<size_t>& line_starts,
+                         const DocPrinterOptions& options,
+                         const std::vector<ByteSpan>& highlights) {
+  std::string ret;
+
+  if (highlights.empty()) {
+    PrintChunk({0, line_starts.size()}, {highlights.begin(), highlights.begin()}, text, line_starts,
+               options, ret);
+    return ret;
+  }
+
+  size_t last_end_line = 0;
+  std::pair<size_t, size_t> cur_chunk = GetLinesForHighlight(highlights[0], line_starts, options);
+  if (cur_chunk.first <= kMinLinesToCutOut) {
+    cur_chunk.first = 0;
+  }
+
+  auto first_highlight_in_cur_chunk = highlights.begin();
+  for (auto highlight_it = highlights.begin() + 1; highlight_it != highlights.end();
+       ++highlight_it) {
+    std::pair<size_t, size_t> new_chunk = GetLinesForHighlight(*highlight_it, line_starts, options);
+
+    if (!TryMergeChunks(cur_chunk, new_chunk)) {
+      PrintCut(cur_chunk.first - last_end_line, ret);
+      PrintChunk(cur_chunk, {first_highlight_in_cur_chunk, highlight_it}, text, line_starts,
+                 options, ret);
+      last_end_line = cur_chunk.second;
+      cur_chunk = new_chunk;
+      first_highlight_in_cur_chunk = highlight_it;
+    }
+  }
+
+  PrintCut(cur_chunk.first - last_end_line, ret);
+  if (line_starts.size() - cur_chunk.second <= kMinLinesToCutOut) {
+    cur_chunk.second = line_starts.size();
+  }
+  PrintChunk(cur_chunk, {first_highlight_in_cur_chunk, highlights.end()}, text, line_starts,
+             options, ret);
+  PrintCut(line_starts.size() - cur_chunk.second, ret);
+  return ret;
+}
+
+}  // anonymous namespace
+
+DocPrinter::DocPrinter(const DocPrinterOptions& options) : options_(options) {
+  line_starts_.push_back(0);
+}
+
+void DocPrinter::Clear() {
   output_.str("");
-  return result;
+  highlights_.clear();
+  line_starts_.resize(1);
+}
+
+void DocPrinter::Append(const Doc& doc) { Append(doc, ObjectPath{}); }
+
+void DocPrinter::Append(const Doc& doc, const ObjectPath& path_to_highlight) {
+  path_to_highlight_ = path_to_highlight;
+  current_path_best_match_length_ = 0;
+  current_highlight_candidates_.clear();
+  PrintDoc(doc);
+
+  highlights_.insert(highlights_.end(), current_highlight_candidates_.begin(),
+                     current_highlight_candidates_.end());
+}
+
+String DocPrinter::GetString() const {
+  std::string text = output_.str();
+  if (!text.empty() && text.back() != '\n') {
+    text.push_back('\n');
+  }
+
+  std::vector<ByteSpan> highlights = highlights_;
+  SortAndMergeSpans(highlights);
+  return DecorateText(text, line_starts_, options_, highlights);
 }
 
 void DocPrinter::PrintDoc(const Doc& doc) {
+  size_t start_pos = output_.tellp();
+
   if (const auto* doc_node = doc.as<LiteralDocNode>()) {
     PrintTypedDoc(GetRef<LiteralDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<SliceDocNode>()) {
@@ -78,18 +299,40 @@ void DocPrinter::PrintDoc(const Doc& doc) {
     LOG(FATAL) << "Do not know how to print " << doc->GetTypeKey();
     throw;
   }
+
+  size_t end_pos = output_.tellp();
+  for (const ObjectPath& path : doc->paths) {
+    MarkSpan({start_pos, end_pos}, path);
+  }
+}
+
+void DocPrinter::MarkCurrentPosition(const ObjectPath& path) {
+  size_t pos = output_.tellp();
+  MarkSpan({pos, pos}, path);
+}
+
+void DocPrinter::MarkSpan(const ByteSpan& span, const ObjectPath& path) {
+  if (path_to_highlight_.defined()) {
+    if (path.Length() >= current_path_best_match_length_ && path.IsPrefixOf(path_to_highlight_)) {
+      if (path.Length() > current_path_best_match_length_) {
+        current_path_best_match_length_ = path.Length();
+        current_highlight_candidates_.clear();
+      }
+      current_highlight_candidates_.push_back(span);
+    }
+  }
 }
 
 void PythonDocPrinter::PrintTypedDoc(const LiteralDoc& doc) {
   const ObjectRef& value = doc->value;
-  if (value->IsInstance<FloatImmNode>() || value->IsInstance<IntImmNode>()) {
+  if (!value.defined()) {
+    output_ << "None";
+  } else if (value->IsInstance<FloatImmNode>() || value->IsInstance<IntImmNode>()) {
     PrintNumberNode(Downcast<PrimExpr>(doc->value));
   } else if (const auto* string_obj = value.as<StringObj>()) {
     PrintStringLiteral(GetRef<String>(string_obj));
   } else if (const auto* node = value.as<tir::StringImmNode>()) {
     PrintStringLiteral(node->value);
-  } else if (!value.defined()) {
-    output_ << "None";
   } else {
     ICHECK(false) << "Unsupported literal value type " << value->GetTypeKey();
   }
@@ -221,10 +464,7 @@ void PythonDocPrinter::PrintTypedDoc(const TupleDoc& doc) {
   }
 }
 
-void PythonDocPrinter::PrintTypedDoc(const StmtBlockDoc& doc) {
-  LOG(FATAL)
-      << "StmtBlockDoc shouldn't exist in the translated doc tree. Using Array<StmtDoc> instead";
-}
+void PythonDocPrinter::PrintTypedDoc(const StmtBlockDoc& doc) { PrintStmtArray(doc->stmts); }
 
 void PythonDocPrinter::PrintTypedDoc(const ExprStmtDoc& doc) { PrintDoc(doc->expr); }
 
@@ -305,6 +545,31 @@ void PythonDocPrinter::PrintTypedDoc(const FunctionDoc& doc) {
   output_ << ":";
 
   PrintStmtBlock(doc->body);
+  NewLine();
+}
+
+void PythonDocPrinter::PrintStmtArray(const Array<StmtDoc>& docs) {
+  bool first = true;
+  for (const StmtDoc& d : docs) {
+    if (first) {
+      first = false;
+    } else {
+      NewLine();
+    }
+    PrintDoc(d);
+    for (const ObjectPath& path : d->paths) {
+      if (const ArrayIndexPathNode* array_index = path.as<ArrayIndexPathNode>()) {
+        MarkCurrentPosition(array_index->GetParent()->MissingArrayElement(array_index->index + 1));
+      }
+    }
+  }
+}
+
+void PythonDocPrinter::PrintStmtBlock(const Array<StmtDoc>& docs) {
+  IncreaseIndent();
+  NewLine();
+  PrintStmtArray(docs);
+  DecreaseIndent();
 }
 
 void PythonDocPrinter::PrintStringLiteral(const String& string) {

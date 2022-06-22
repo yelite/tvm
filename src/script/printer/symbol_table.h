@@ -29,55 +29,71 @@ namespace printer {
 
 class SymbolTableNode : public Object {
  public:
-  Map<String, ObjectRef> name2obj;
-  Map<ObjectRef, ExprDoc> obj2doc;
+  void VisitAttrs(AttrVisitor*) {}
 
-  void VisitAttrs(AttrVisitor* v) {
-    v->Visit("name2obj", &name2obj);
-    v->Visit("obj2doc", &obj2doc);
+  IdDoc DefByName(const ObjectRef& obj, const TracedObject<String>& name_prefix) {
+    String name = GetUniqueName(name_prefix.Get());
+    DocFactory doc_factory = [name](ObjectPath path) {
+      IdDoc doc(name);
+      doc->paths.push_back(path);
+      return doc;
+    };
+
+    auto result = obj2info.insert({obj, ObjectInfo{std::move(doc_factory), name}});
+    ICHECK(result.second) << "Duplicated object: " << obj;
+
+    IdDoc def_doc(name);
+    def_doc->paths.push_back(name_prefix.GetPath());
+    return def_doc;
   }
 
-  IdDoc DefByName(const ObjectRef& obj, const String& name) {
-    ICHECK(!name2obj.count(name)) << "Duplicated name: " << name;
-    ICHECK(!obj2doc.count(obj)) << "Duplicated object: " << obj;
-    IdDoc doc = IdDoc(name);
-    name2obj.Set(name, obj);
-    obj2doc.Set(obj, doc);
-    return doc;
-  }
+  using DocFactory = std::function<ExprDoc(ObjectPath)>;
 
-  ExprDoc DefByDoc(const ObjectRef& obj, const ExprDoc& doc) {
-    ICHECK(!obj2doc.count(obj)) << "Duplicated object: " << obj;
-    obj2doc.Set(obj, doc);
-    return doc;
+  void DefByDoc(const ObjectRef& obj, DocFactory doc_factory) {
+    auto result = obj2info.insert({obj, ObjectInfo{std::move(doc_factory), NullOpt}});
+    ICHECK(result.second) << "Duplicated object: " << obj;
   }
 
   void UndefByObject(const ObjectRef& obj) {
-    ExprDoc doc = obj2doc[obj];
-    if (const auto* id = doc.as<IdDocNode>()) {
-      name2obj.erase(id->name);
+    auto it = obj2info.find(obj);
+    ICHECK(it != obj2info.end()) << "No such object: " << obj;
+
+    if (it->second.name.defined()) {
+      names.erase(it->second.name.value());
     }
-    obj2doc.erase(obj);
+    obj2info.erase(it);
   }
 
-  Optional<ExprDoc> GetObjectDoc(const ObjectRef& obj) const {
-    auto it = obj2doc.find(obj);
-    if (it == obj2doc.end()) {
+  Optional<ExprDoc> GetObjectDoc(const TracedObject<ObjectRef>& obj) const {
+    auto it = obj2info.find(obj.Get());
+    if (it == obj2info.end()) {
       return NullOpt;
     }
-    return (*it).second;
+    return it->second.doc_factory(obj.GetPath());
   }
 
-  String GetUniqueName(const String& prefix) const {
+  bool IsObjectDefined(const ObjectRef& obj) { return obj2info.count(obj); }
+
+  String GetObjectName(const ObjectRef& obj) const { return obj2info.at(obj).name.value(); }
+
+  static constexpr const char* _type_key = "script.SymbolTable";
+  TVM_DECLARE_FINAL_OBJECT_INFO(SymbolTableNode, Object);
+
+  String GetUniqueName(const String& prefix) {
     String name = prefix;
-    for (int i = 1; name2obj.count(name) != 0; ++i) {
+    for (int i = 1; !names.insert(name).second; ++i) {
       name = prefix + "_" + std::to_string(i);
     }
     return name;
   }
 
-  static constexpr const char* _type_key = "script.SymbolTable";
-  TVM_DECLARE_FINAL_OBJECT_INFO(SymbolTableNode, Object);
+ private:
+  struct ObjectInfo {
+    DocFactory doc_factory;
+    Optional<String> name;
+  };
+  std::unordered_set<String> names;
+  std::unordered_map<ObjectRef, ObjectInfo, ObjectPtrHash, ObjectPtrEqual> obj2info;
 };
 
 class SymbolTable : public ObjectRef {

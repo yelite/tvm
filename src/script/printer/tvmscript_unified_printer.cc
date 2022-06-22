@@ -22,32 +22,44 @@
 #include "doc.h"
 #include "doc_printer.h"
 #include "ir_docsifier.h"
+#include "tir/tir.h"
 
 namespace tvm {
 namespace script {
 namespace printer {
 
-String AsTVMScript(const ObjectRef& node, Map<String, String> ir_prefix, int32_t indent_spaces) {
+String AsTVMScript(const ObjectRef& node, Map<String, String> ir_prefix, int32_t indent_spaces,
+                   ObjectPath path_to_highlight, int32_t num_context_lines) {
   IRDocsifier ir_docsifier(ir_prefix);
 
   auto tir_dispatch_ctx = ir_docsifier->WithDispatchToken("tir");
 
   // TODO: Handle metadata frame
   MetadataFrame metadata_frame(ir_docsifier->sym);
-  VarDefFrame def_frame(ir_docsifier->sym);
+  TIRGeneralFrame tir_frame(ir_docsifier->sym);
   auto metadata_frame_ctx = ir_docsifier->WithFrame(metadata_frame);
-  auto frame_ctx = ir_docsifier->WithFrame(def_frame);
+  auto frame_ctx = ir_docsifier->WithFrame(tir_frame);
 
-  Doc doc = ir_docsifier->AsDoc<Doc>(node);
+  Doc doc = ir_docsifier->AsDoc<Doc>(MakeTraced(node));
 
   Array<Doc> doc_to_print;
-  for (const StmtDoc& def : def_frame->stmts) {
+  for (const StmtDoc& def : tir_frame->stmts) {
     doc_to_print.push_back(def);
   }
   doc_to_print.push_back(doc);
 
-  PythonDocPrinter doc_printer(indent_spaces);
-  return doc_printer.Print(doc);
+  DocPrinterOptions options;
+  options.indent_spaces = indent_spaces;
+
+  if (num_context_lines < 0) {
+    options.num_context_lines = std::numeric_limits<size_t>::max();
+  } else {
+    options.num_context_lines = num_context_lines;
+  }
+
+  PythonDocPrinter doc_printer(options);
+  doc_printer.Append(doc, path_to_highlight);
+  return doc_printer.GetString();
 }
 
 TVM_REGISTER_GLOBAL("experiment.AsTVMScript").set_body_typed(AsTVMScript);

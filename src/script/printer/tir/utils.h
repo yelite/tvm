@@ -19,6 +19,8 @@
 #ifndef TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 #define TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 
+#include <tvm/node/traced_object.h>
+
 #include "../ir_docsifier.h"
 #include "./tir.h"
 
@@ -31,7 +33,7 @@ inline bool AllowConciseScoping(const IRDocsifier& p) {
   return f != nullptr && f->allow_concise_scoping_;
 }
 
-inline Array<StmtDoc> AsStmtDocArray(const ObjectRef& obj, IRDocsifier p) {
+inline Array<StmtDoc> AsStmtDocArray(const TracedObject<ObjectRef>& obj, IRDocsifier p) {
   Doc doc = p->AsDoc<Doc>(obj);
   if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
     return stmt_block->stmts;
@@ -50,6 +52,48 @@ inline LiteralDoc DType2Literal(const DLDataType& dtype) {
   using runtime::DLDataType2String;
   return LiteralDoc::Str(DLDataType2String(dtype));
 }
+
+inline LiteralDoc DType2Literal(const TracedBasicValue<DataType>& dtype) {
+  auto doc = DType2Literal(dtype.Get());
+  doc->paths.push_back(dtype.GetPath());
+  return doc;
+}
+
+inline IdDoc DefineVariable(const TracedObject<tir::Var>& var, const Frame& frame) {
+  // Note that the C++ object member is called "name_hint" but VisitAttrs uses just "name"
+  return frame->DefByName(var.Get(), var.GetAttr<String>("name"));
+}
+
+inline void DefineBufferDataVariable(const tir::Buffer& buffer, const Frame& frame) {
+  auto buffer_name = frame->sym->GetObjectName(buffer);
+  frame->DefByDoc(buffer->data, [buffer_name](ObjectPath path) {
+    auto ret = IdDoc(buffer_name)->Attr("data");
+    ret->paths.push_back(path);
+    return ret;
+  });
+}
+
+inline void DefineBufferElemOffsetVariable(const tir::Buffer& buffer, const Frame& frame) {
+  auto buffer_name = frame->sym->GetObjectName(buffer);
+  frame->DefByDoc(buffer->elem_offset, [buffer_name](ObjectPath path) {
+    auto ret = IdDoc(buffer_name)->Attr("elem_offset");
+    ret->paths.push_back(path);
+    return ret;
+  });
+}
+
+inline IdDoc DefineBuffer(const TracedObject<tir::Buffer>& buffer, const Frame& frame) {
+  return frame->DefByName(buffer.Get(), buffer.GetAttr<String>("name"));
+}
+
+ExprDoc GetTypeAnnotationDocForVar(const TracedObject<tir::Var>& var, const IRDocsifier& p);
+
+void PostOrderVisitExprTraced(const TracedObject<PrimExpr>& expr,
+                              const std::function<void(const TracedObject<PrimExpr>&)>& callback);
+
+void PostOrderVisitStmtExprTraced(
+    const TracedObject<tir::Stmt>& expr,
+    const std::function<void(const TracedObject<ObjectRef>&)>& callback);
 
 }  // namespace printer
 }  // namespace script

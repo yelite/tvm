@@ -25,15 +25,28 @@ namespace tvm {
 namespace script {
 namespace printer {
 
+using ByteSpan = std::pair<size_t, size_t>;
+
+struct DocPrinterOptions {
+  int indent_spaces = 4;
+  bool print_line_numbers = false;
+  size_t num_context_lines = std::numeric_limits<size_t>::max();
+};
+
 class DocPrinter {
  public:
+  explicit DocPrinter(const DocPrinterOptions& options);
   virtual ~DocPrinter() = default;
 
-  virtual String Print(Doc doc);
-  virtual String Print(Array<Doc> docs);
+  void Clear();
+  void Append(const Doc& doc);
+  void Append(const Doc& doc, const ObjectPath& path_to_highlight);
+  String GetString() const;
 
  protected:
-  virtual void PrintDoc(const Doc& doc);
+  void PrintDoc(const Doc& doc);
+
+  void MarkCurrentPosition(const ObjectPath& path);
 
   virtual void PrintTypedDoc(const LiteralDoc& doc) = 0;
   virtual void PrintTypedDoc(const SliceDoc& doc) = 0;
@@ -57,18 +70,34 @@ class DocPrinter {
 
   using OutputStream = std::ostringstream;
 
+  void IncreaseIndent() { indent_ += options_.indent_spaces; }
+
+  void DecreaseIndent() { indent_ -= options_.indent_spaces; }
+
   OutputStream& NewLine() {
-    output_ << "\n" << std::string(indent_, ' ');
+    output_ << "\n";
+    line_starts_.push_back(output_.tellp());
+    output_ << std::string(indent_, ' ');
     return output_;
   }
 
   OutputStream output_;
+
+ private:
+  void MarkSpan(const ByteSpan& span, const ObjectPath& path);
+
+  DocPrinterOptions options_;
   int indent_ = 0;
+  std::vector<size_t> line_starts_;
+  ObjectPath path_to_highlight_;
+  size_t current_path_best_match_length_;
+  std::vector<ByteSpan> current_highlight_candidates_;
+  std::vector<ByteSpan> highlights_;
 };
 
 class PythonDocPrinter : public DocPrinter {
  public:
-  PythonDocPrinter(int indent_spaces) : indent_spaces_(indent_spaces) {}
+  PythonDocPrinter(const DocPrinterOptions& options) : DocPrinter(options) {}
 
  protected:
   using DocPrinter::PrintDoc;
@@ -94,26 +123,9 @@ class PythonDocPrinter : public DocPrinter {
   void PrintTypedDoc(const FunctionDoc& doc) final;
 
  private:
-  int indent_spaces_ = 4;
+  void PrintStmtArray(const Array<StmtDoc>& docs);
 
-  void IncreaseIndent() { indent_ += indent_spaces_; }
-
-  void DecreaseIndent() { indent_ -= indent_spaces_; }
-
-  void PrintStmtBlock(const Array<StmtDoc>& doc) {
-    IncreaseIndent();
-    NewLine();
-    PrintStmts(doc);
-    DecreaseIndent();
-  }
-
-  template <typename DocType>
-  void PrintStmts(const Array<DocType>& stmts) {
-    for (const DocType& d : stmts) {
-      PrintDoc(d);
-      NewLine();
-    }
-  }
+  void PrintStmtBlock(const Array<StmtDoc>& docs);
 
   template <typename ContainerType>
   void PrintJoinedElements(const std::string& left, const ContainerType& elements,
