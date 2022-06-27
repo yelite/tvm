@@ -60,8 +60,7 @@ inline LiteralDoc DType2Literal(const TracedBasicValue<DataType>& dtype) {
 }
 
 inline IdDoc DefineVariable(const TracedObject<tir::Var>& var, const Frame& frame) {
-  // Note that the C++ object member is called "name_hint" but VisitAttrs uses just "name"
-  return frame->DefByName(var.Get(), var.GetAttr<String>("name"));
+  return frame->DefByName(var.Get(), var.GetAttr(&tir::VarNode::name_hint));
 }
 
 inline void DefineBufferDataVariable(const tir::Buffer& buffer, const Frame& frame) {
@@ -83,7 +82,7 @@ inline void DefineBufferElemOffsetVariable(const tir::Buffer& buffer, const Fram
 }
 
 inline IdDoc DefineBuffer(const TracedObject<tir::Buffer>& buffer, const Frame& frame) {
-  return frame->DefByName(buffer.Get(), buffer.GetAttr<String>("name"));
+  return frame->DefByName(buffer.Get(), buffer.GetAttr(&tir::BufferNode::name));
 }
 
 ExprDoc GetTypeAnnotationDocForVar(const TracedObject<tir::Var>& var, const IRDocsifier& p);

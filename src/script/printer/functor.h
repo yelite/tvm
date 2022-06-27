@@ -24,6 +24,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#include "tvm/node/traced_object.h"
 #include "tvm/runtime/logging.h"
 
 namespace tvm {
@@ -103,6 +105,39 @@ class ObjectFunctor<R(const ObjectRef& n, Args...)> {
     } else {
         return nullptr;
     }
+  }
+};
+
+template <typename R, typename... Args>
+class TracedObjectFunctor : private ObjectFunctor<R(const ObjectRef&, ObjectPath, Args...)> {
+  template <class TObjectRef, class TCallable>
+  using IsTracedObjectDispatchFunc = typename std::enable_if_t<
+      std::is_convertible<TCallable, std::function<R(TracedObject<TObjectRef>, Args...)>>::value>;
+
+  using TBase = ObjectFunctor<R(const ObjectRef&, ObjectPath, Args...)>;
+  using TSelf = TracedObjectFunctor<R, Args...>;
+
+ public:
+  using TBase::operator();
+
+  template <typename TObjectRef, typename TCallable,
+            typename = IsTracedObjectDispatchFunc<TObjectRef, TCallable>>
+  TSelf& set_dispatch(TCallable f) {
+    TBase::template set_dispatch<TObjectRef>(
+        [f](TObjectRef object, ObjectPath path, Args... args) -> R {
+          return f(MakeTraced(object, path), std::forward<Args>(args)...);
+        });
+    return *this;
+  }
+
+  template <typename TObjectRef, typename TCallable,
+            typename = IsTracedObjectDispatchFunc<TObjectRef, TCallable>>
+  TSelf& set_dispatch(String token, TCallable f) {
+    TBase::template set_dispatch<TObjectRef>(
+        std::move(token), [f](TObjectRef object, ObjectPath path, Args... args) -> R {
+          return f(MakeTraced(object, path), std::forward<Args>(args)...);
+        });
+    return *this;
   }
 };
 

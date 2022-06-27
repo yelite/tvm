@@ -43,19 +43,18 @@ class PrimFuncFrame : public TIRFrame {
 };
 
 static TracedObject<tir::Stmt> GetFunctionBody(const TracedObject<tir::PrimFunc>& func) {
-  auto func_body = func.GetAttr<tir::Stmt>("body");
+  auto func_body = func.GetAttr(&tir::PrimFuncNode::body);
   if (auto block_realize = func_body.TryDowncast<tir::BlockRealize>()) {
     if (block_realize.value().Get()->iter_values.empty() &&
         block_realize.value().Get()->block->annotations.empty()) {
-      return block_realize.value().GetAttr<tir::Block>("block");
+      return block_realize.value().GetAttr(&tir::BlockRealizeNode::block);
     }
   }
   return func_body;
 }
 
-Doc PrintPrimFunc(tir::PrimFunc raw_func, ObjectPath path, IRDocsifier p) {
+Doc PrintPrimFunc(TracedObject<tir::PrimFunc> func, IRDocsifier p) {
   using namespace tvm::tir;
-  auto func = MakeTraced(raw_func, path);
 
   PrimFuncFrame frame(p->sym);
   WithCtx with_dispatch = p->WithDispatchToken("tir");
@@ -68,7 +67,7 @@ Doc PrintPrimFunc(tir::PrimFunc raw_func, ObjectPath path, IRDocsifier p) {
   {
     std::vector<Var> buffer_vars;
     std::vector<TracedObject<Buffer>> buffers;
-    for (auto kv : func.GetAttr<Map<Var, Buffer>>("buffer_map")) {
+    for (auto kv : func.GetAttr(&tir::PrimFuncNode::buffer_map)) {
       Var buffer_var = kv.first;
       TracedObject<Buffer> buffer = kv.second;
       buffers.push_back(buffer);
@@ -91,7 +90,7 @@ Doc PrintPrimFunc(tir::PrimFunc raw_func, ObjectPath path, IRDocsifier p) {
       }
     }
   }
-  auto params = func.GetAttr<Array<Var>>("params");
+  auto params = func.GetAttr(&tir::PrimFuncNode::params);
   Array<AssignDoc> args;
   args.reserve(params.size());
   for (TracedObject<Var> v : params) {
@@ -121,7 +120,7 @@ Doc PrintPrimFunc(tir::PrimFunc raw_func, ObjectPath path, IRDocsifier p) {
     auto var_ref = GetRef<Var>(var_and_path.first);
     auto var = MakeTraced(var_ref, var_and_path.second);
     IdDoc id = DefineVariable(var, frame);
-    auto dtype = var.GetAttr<DataType>("dtype");
+    auto dtype = var.GetAttr(&VarNode::dtype);
     ExprDoc rhs = TIR(p)->Attr("var")->Call({DType2Literal(dtype)});
     body.push_back(AssignDoc(id, rhs, NullOpt));
   }
@@ -146,7 +145,7 @@ Doc PrintPrimFunc(tir::PrimFunc raw_func, ObjectPath path, IRDocsifier p) {
   auto func_body = GetFunctionBody(func);
   body = runtime::Concat(body, AsStmtDocArray(func_body, p));
 
-  auto ret_type = func.GetAttr<Type>("ret_type");
+  auto ret_type = func.GetAttr(&PrimFuncNode::ret_type);
 
   return FunctionDoc(/*name=*/IdDoc("main"),  //
                      /*args=*/args,

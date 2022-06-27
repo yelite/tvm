@@ -35,14 +35,14 @@ constexpr const char kFTVMScriptOpSugarKey[] = "FTVMScriptOpSugar";
 
 ExprDoc PrintOpCall(TracedObject<tir::Call> call, IRDocsifier p) {
   static auto op_sugar_map = Op::GetAttrMap<String>(kFTVMScriptOpSugarKey);
-  auto op = call.GetAttr<Op>("op");
-  auto args = call.GetAttr<Array<PrimExpr>>("args");
+  auto op = call.GetAttr(&tir::CallNode::op).Downcast<Op>();
+  auto args = call.GetAttr(&tir::CallNode::args);
 
   if (op_sugar_map.count(op.Get())) {
     auto name_str = MakeTraced(op_sugar_map[op.Get()], op.GetPath());
     return TIR(p)->Attr(name_str)->Call(AsExprDocArray(args, p), {}, {});
   } else {
-    auto op_name = op.GetAttr<String>("name");
+    auto op_name = op.GetAttr(&OpNode::name);
     Array<ExprDoc> arg_docs{LiteralDoc::Str(op_name)};
     arg_docs = Concat(arg_docs, AsExprDocArray(args, p));
     return TIR(p)->Attr("call")->Call(arg_docs);

@@ -42,12 +42,22 @@ namespace tvm {
 namespace script {
 namespace printer {
 
+static TracedOptional<tir::Buffer> GetUsedBuffer(const TracedObject<ObjectRef>& stmt_or_expr) {
+  if (auto load = stmt_or_expr.TryDowncast<tir::BufferLoad>()) {
+    return load.value().GetAttr(&tir::BufferLoadNode::buffer);
+  } else if (auto store = stmt_or_expr.TryDowncast<tir::BufferStore>()) {
+    return store.value().GetAttr(&tir::BufferStoreNode::buffer);
+  } else {
+    return TracedOptional<tir::Buffer>({}, {});
+  }
+}
+
 std::vector<TracedObject<tir::Buffer>> FindBufferVarUsage(tir::Var buffer_var,
                                                           TracedObject<tir::Stmt> body) {
   std::vector<TracedObject<tir::Buffer>> ret;
   PostOrderVisitStmtExprTraced(body, [&](const TracedObject<ObjectRef>& stmt_or_expr) {
-    if (stmt_or_expr.IsInstance<tir::BufferLoad>() || stmt_or_expr.IsInstance<tir::BufferStore>()) {
-      auto buffer = stmt_or_expr.GetAttr<tir::Buffer>("buffer");
+    if (auto buffer_opt = GetUsedBuffer(stmt_or_expr)) {
+      auto buffer = buffer_opt.value();
       if (buffer.Get()->data.same_as(buffer_var) &&
           std::find_if(ret.begin(), ret.end(),
                        [&](const auto& b) { return b.Get() == buffer.Get(); }) == ret.end()) {
@@ -84,22 +94,19 @@ StmtBlockDoc AsConciseScopedStmts(ExprDoc rhs, Array<StmtDoc> body, TIRFrame fra
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::SeqStmt>([](tir::SeqStmt raw_stmt, ObjectPath path, IRDocsifier p) {
-      auto stmt = MakeTraced(raw_stmt, path);
+    .set_dispatch<tir::SeqStmt>([](TracedObject<tir::SeqStmt> stmt, IRDocsifier p) {
       Array<StmtDoc> result;
-      for (const auto& child_stmt : stmt.GetAttr<Array<tir::Stmt>>("seq")) {
+      for (const auto& child_stmt : stmt.GetAttr(&tir::SeqStmtNode::seq)) {
         result = runtime::Concat(result, AsStmtDocArray(child_stmt, p));
       }
       return StmtBlockDoc(result);
     });
 
-StmtBlockDoc PrintAssertStmt(tir::AssertStmt raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
+StmtBlockDoc PrintAssertStmt(TracedObject<tir::AssertStmt> stmt, IRDocsifier p) {
   // TODO: extract free vars from expr
-  ExprDoc condition_expr = p->AsExprDoc(stmt.GetAttr<PrimExpr>("condition"));
-  ExprDoc message_expr = p->AsExprDoc(stmt.GetAttr<PrimExpr>("message"));
-  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p);
+  ExprDoc condition_expr = p->AsExprDoc(stmt.GetAttr(&tir::AssertStmtNode::condition));
+  ExprDoc message_expr = p->AsExprDoc(stmt.GetAttr(&tir::AssertStmtNode::message));
+  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr(&tir::AssertStmtNode::body), p);
 
   ExprDoc assert_call_expr = TIR(p)->Attr("Assert")->Call({condition_expr, message_expr});
   StmtDoc assert_stmt =
@@ -110,82 +117,70 @@ StmtBlockDoc PrintAssertStmt(tir::AssertStmt raw_stmt, ObjectPath path, IRDocsif
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AssertStmt>(PrintAssertStmt);
 
-StmtDoc PrintStore(tir::Store raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
+StmtDoc PrintStore(TracedObject<tir::Store> stmt, IRDocsifier p) {
   // TODO: extract free vars from expr
   Array<ExprDoc> args =
-      AsExprDocArray({stmt.GetAttr<ObjectRef>("buffer_var"), stmt.GetAttr<ObjectRef>("index"),
-                      stmt.GetAttr<ObjectRef>("value"), stmt.GetAttr<ObjectRef>("predicate")},
+      AsExprDocArray({TracedObject<ObjectRef>(stmt.GetAttr(&tir::StoreNode::buffer_var)),
+                      TracedObject<ObjectRef>(stmt.GetAttr(&tir::StoreNode::index)),
+                      TracedObject<ObjectRef>(stmt.GetAttr(&tir::StoreNode::value)),
+                      TracedObject<ObjectRef>(stmt.GetAttr(&tir::StoreNode::predicate))},
                      p);
   return ExprStmtDoc(TIR(p)->Attr("store")->Call(args));
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Store>(PrintStore);
 
-StmtDoc PrintBufferStore(tir::BufferStore raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
-  Array<ExprDoc> indices = AsExprDocArray(stmt.GetAttr<Array<PrimExpr>>("indices"), p);
+StmtDoc PrintBufferStore(TracedObject<tir::BufferStore> stmt, IRDocsifier p) {
+  Array<ExprDoc> indices = AsExprDocArray(stmt.GetAttr(&tir::BufferStoreNode::indices), p);
   Array<Doc> index_docs(indices.begin(), indices.end());
-  return AssignDoc(p->AsExprDoc(stmt.GetAttr<tir::Buffer>("buffer"))->Index(index_docs),
-                   p->AsExprDoc(stmt.GetAttr<PrimExpr>("value")), NullOpt);
+  return AssignDoc(p->AsExprDoc(stmt.GetAttr(&tir::BufferStoreNode::buffer))->Index(index_docs),
+                   p->AsExprDoc(stmt.GetAttr(&tir::BufferStoreNode::value)), NullOpt);
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BufferStore>(PrintBufferStore);
 
-StmtDoc PrintIfThenElse(tir::IfThenElse raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
-  ExprDoc predicate = p->AsExprDoc(stmt.GetAttr<PrimExpr>("condition"));
-  Array<StmtDoc> then_branch = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("then_case"), p);
-  Array<StmtDoc> else_branch = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("else_case"), p);
+StmtDoc PrintIfThenElse(TracedObject<tir::IfThenElse> stmt, IRDocsifier p) {
+  ExprDoc predicate = p->AsExprDoc(stmt.GetAttr(&tir::IfThenElseNode::condition));
+  Array<StmtDoc> then_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::then_case), p);
+  Array<StmtDoc> else_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::else_case), p);
   return IfDoc(predicate, then_branch, else_branch);
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::IfThenElse>(PrintIfThenElse);
 
-StmtDoc PrintWhile(tir::While raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
-  return WhileDoc(p->AsExprDoc(stmt.GetAttr<PrimExpr>("condition")),
-                  AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p));
+StmtDoc PrintWhile(TracedObject<tir::While> stmt, IRDocsifier p) {
+  return WhileDoc(p->AsExprDoc(stmt.GetAttr(&tir::WhileNode::condition)),
+                  AsStmtDocArray(stmt.GetAttr(&tir::WhileNode::body), p));
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::While>(PrintWhile);
 
-StmtDoc PrintPrefetch(tir::Prefetch raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
-  return ExprStmtDoc(TIR(p)
-                         ->Attr("prefetch")
-                         ->Call({p->AsExprDoc(stmt.GetAttr<tir::Buffer>("buffer")),
-                                 p->AsExprDoc(stmt.GetAttr<ObjectRef>("bounds"))}));
+StmtDoc PrintPrefetch(TracedObject<tir::Prefetch> stmt, IRDocsifier p) {
+  auto buffer = stmt.GetAttr(&tir::PrefetchNode::buffer);
+  auto bounds = stmt.GetAttr(&tir::PrefetchNode::bounds);
+  return ExprStmtDoc(TIR(p)->Attr("prefetch")->Call({p->AsExprDoc(buffer), AsListDoc(bounds, p)}));
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Prefetch>(PrintPrefetch);
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::Evaluate>([](tir::Evaluate raw_stmt, ObjectPath path, IRDocsifier p) {
-      auto stmt = MakeTraced(raw_stmt, path);
-      return ExprStmtDoc(p->AsExprDoc(stmt.GetAttr<PrimExpr>("value")));
+    .set_dispatch<tir::Evaluate>([](TracedObject<tir::Evaluate> stmt, IRDocsifier p) {
+      return ExprStmtDoc(p->AsExprDoc(stmt.GetAttr(&tir::EvaluateNode::value)));
     });
 
-StmtBlockDoc PrintLetStmt(tir::LetStmt raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
+StmtBlockDoc PrintLetStmt(TracedObject<tir::LetStmt> stmt, IRDocsifier p) {
   auto current_frame = p->GetFrame<TIRFrame>().value();
   TIRGeneralFrame new_frame(p->sym);
   WithCtx with_frame = p->WithFrame(new_frame);
 
-  auto var = stmt.GetAttr<tir::Var>("var");
+  auto var = stmt.GetAttr(&tir::LetStmtNode::var);
   IdDoc var_doc = DefineVariable(var, new_frame);
 
   // TODO: PrintNonHeaderBufferDeclarations
-  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p);
+  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr(&tir::LetStmtNode::body), p);
 
-  auto value_doc = p->AsExprDoc(stmt.GetAttr<PrimExpr>("value"));
-  auto dtype = var.GetAttr<DataType>("dtype");
+  auto value_doc = p->AsExprDoc(stmt.GetAttr(&tir::LetStmtNode::value));
+  auto dtype = var.GetAttr(&tir::VarNode::dtype);
   auto type_annotation_doc = GetTypeAnnotationDocForVar(var, p);
 
   if (current_frame->allow_concise_scoping_) {
@@ -209,7 +204,7 @@ struct AllocUsage {
 
 template <typename AllocRef>
 AllocUsage FindAllocateUsage(const TracedObject<AllocRef>& op) {
-  auto body = op.template GetAttr<tir::Stmt>("body");
+  auto body = op.template GetAttr(&AllocRef::ContainerType::body);
   std::vector<TracedObject<tir::Buffer>> buffer_usage =
       FindBufferVarUsage(op.Get()->buffer_var, body);
 
@@ -247,9 +242,8 @@ IdDoc DefineAllocBuffer(const TracedOptional<tir::Buffer>& alloc_buffer,
     DefineBufferDataVariable(alloc_buffer.value().Get(), frame);
     return id;
   } else {
-    auto buffer_var = stmt.GetAttr<tir::Var>("buffer_var");
-    // Note that the C++ object member is called "name_hint" but VisitAttrs uses just "name"
-    auto buffer_var_name_hint = buffer_var.GetAttr<String>("name");
+    auto buffer_var = stmt.GetAttr(&tir::AllocateNode::buffer_var);
+    auto buffer_var_name_hint = buffer_var.GetAttr(&tir::VarNode::name_hint);
     String buffer_name = frame->sym->GetUniqueName(buffer_var_name_hint.Get());
     frame->DefByDoc(stmt.Get()->buffer_var, [buffer_name](ObjectPath path) {
       auto ret = IdDoc(buffer_name)->Attr("data");
@@ -269,17 +263,15 @@ tir::Buffer CreateFakeBuffer(const tir::Allocate& allocate_stmt) {
 }
 
 LiteralDoc GetStorageScope(const TracedObject<tir::Allocate>& stmt) {
-  auto buffer_var = stmt.GetAttr<tir::Var>("buffer_var");
-  auto type = buffer_var.GetAttr<PointerType>("type_annotation");
-  auto scope = type.GetAttr<String>("storage_scope");
+  auto buffer_var = stmt.GetAttr(&tir::AllocateNode::buffer_var);
+  auto type = buffer_var.GetAttr(&tir::VarNode::type_annotation).Downcast<PointerType>();
+  auto scope = type.GetAttr(&PointerTypeNode::storage_scope);
   return LiteralDoc::Str(scope);
 }
 
 }  // namespace
 
-StmtBlockDoc PrintAllocate(tir::Allocate raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
+StmtBlockDoc PrintAllocate(TracedObject<tir::Allocate> stmt, IRDocsifier p) {
   // TODO: Print aliasing buffers
   AllocUsage usage = FindAllocateUsage(stmt);
 
@@ -292,7 +284,8 @@ StmtBlockDoc PrintAllocate(tir::Allocate raw_stmt, ObjectPath path, IRDocsifier 
     GetBufferPrintInfo({usage.alloc_buffer.value()}, f_var_defined, &var_explicit_def,
                        associated_vars);
   } else {
-    associated_vars.AssociateIfNotAlready(raw_stmt->buffer_var.get(), CreateFakeBuffer(raw_stmt));
+    associated_vars.AssociateIfNotAlready(stmt.Get()->buffer_var.get(),
+                                          CreateFakeBuffer(stmt.Get()));
   }
   std::vector<BufferPrintInfo> aliasing_buffer_infos =
       GetBufferPrintInfo(usage.aliasing_buffers, f_var_defined, &var_explicit_def, associated_vars);
@@ -306,20 +299,20 @@ StmtBlockDoc PrintAllocate(tir::Allocate raw_stmt, ObjectPath path, IRDocsifier 
   Array<String> alloc_kwarg_keys;
   Array<ExprDoc> alloc_kwarg_values;
 
-  auto extents = stmt.GetAttr<Array<PrimExpr>>("extents");
+  auto extents = stmt.GetAttr(&tir::AllocateNode::extents);
   alloc_args.push_back(AsListDoc(extents, p));
 
-  auto dtype = stmt.GetAttr<DataType>("dtype");
+  auto dtype = stmt.GetAttr(&tir::AllocateNode::dtype);
   alloc_args.push_back(DType2Literal(dtype));
 
   alloc_args.push_back(GetStorageScope(stmt));
 
-  auto condition = stmt.GetAttr<PrimExpr>("condition");
+  auto condition = stmt.GetAttr(&tir::AllocateNode::condition);
   if (!tir::is_one(condition.Get())) {
     alloc_args.push_back(p->AsExprDoc(condition));
   }
 
-  auto annotations = stmt.GetAttr<Map<String, ObjectRef>>("annotations");
+  auto annotations = stmt.GetAttr(&tir::AllocateNode::annotations);
   if (!annotations.empty()) {
     alloc_kwarg_keys.push_back("annotations");
     alloc_kwarg_values.push_back(AsDictDoc(annotations, p));
@@ -336,7 +329,7 @@ StmtBlockDoc PrintAllocate(tir::Allocate raw_stmt, ObjectPath path, IRDocsifier 
     body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
 
-  body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p));
+  body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr(&tir::AllocateNode::body), p));
 
   return AsConciseScopedStmts(alloc_buffer_id_doc, alloc_buffer_expr_doc, body,
                               p->GetFrame<TIRFrame>().value());
@@ -344,57 +337,58 @@ StmtBlockDoc PrintAllocate(tir::Allocate raw_stmt, ObjectPath path, IRDocsifier 
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Allocate>(PrintAllocate);
 
-StmtDoc PrintAllocateConst(tir::AllocateConst raw_stmt, ObjectPath path, IRDocsifier p) { throw; }
+StmtDoc PrintAllocateConst(TracedObject<tir::AllocateConst> stmt, IRDocsifier p) { throw; }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::AllocateConst>(PrintAllocateConst);
 
-StmtBlockDoc PrintAttrStmt(tir::AttrStmt raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-  auto value_doc = p->AsExprDoc(stmt.GetAttr<PrimExpr>("value"));
-  if (raw_stmt->node->IsInstance<tir::BufferNode>() && raw_stmt->attr_key == "realize_scope" &&
-      raw_stmt->body->IsInstance<tir::BufferRealizeNode>()) {
+StmtBlockDoc PrintAttrStmt(TracedObject<tir::AttrStmt> stmt, IRDocsifier p) {
+  auto value_doc = p->AsExprDoc(stmt.GetAttr(&tir::AttrStmtNode::value));
+  auto node = stmt.GetAttr(&tir::AttrStmtNode::node);
+  auto body = stmt.GetAttr(&tir::AttrStmtNode::body);
+  auto attr_key = stmt.GetAttr(&tir::AttrStmtNode::attr_key);
+
+  if (node.IsInstance<tir::Buffer>() && attr_key.Get() == "realize_scope" &&
+      body.IsInstance<tir::BufferRealize>()) {
     // BufferRealize
-    auto realize = stmt.GetAttr<tir::BufferRealize>("body");
-    auto buffer = stmt.GetAttr<tir::Buffer>("node");
+    auto realize = body.Downcast<tir::BufferRealize>();
+    auto buffer = node.Downcast<tir::Buffer>();
     ICHECK(realize.Get()->buffer.same_as(buffer.Get()));
 
     Array<ExprDoc> realize_args;
     realize_args.push_back(p->AsExprDoc(buffer));
-    realize_args.push_back(ListDoc(AsExprDocArray(realize.GetAttr<tir::Region>("bounds"), p)));
+    realize_args.push_back(
+        ListDoc(AsExprDocArray(realize.GetAttr(&tir::BufferRealizeNode::bounds), p)));
     realize_args.push_back(value_doc);
 
-    auto condition = realize.GetAttr<PrimExpr>("condition");
+    auto condition = realize.GetAttr(&tir::BufferRealizeNode::condition);
     if (!tir::is_one(condition.Get())) {
       realize_args.push_back(p->AsExprDoc(condition));
     }
 
-    Array<StmtDoc> body = AsStmtDocArray(realize.GetAttr<tir::Stmt>("body"), p);
+    Array<StmtDoc> body = AsStmtDocArray(realize.GetAttr(&tir::BufferRealizeNode::body), p);
 
     return AsConciseScopedStmts(TIR(p)->Attr("realize")->Call(realize_args), body,
                                 p->GetFrame<TIRFrame>().value());
-  } else if (raw_stmt->node->IsInstance<tir::IterVarNode>() &&
-             (raw_stmt->attr_key == "thread_extent" || raw_stmt->attr_key == "virtual_thread")) {
+  } else if (node.IsInstance<tir::IterVar>() &&
+             (attr_key.Get() == "thread_extent" || attr_key.Get() == "virtual_thread")) {
     // IterVar
-    auto iter_var = stmt.GetAttr<tir::IterVar>("node");
-    auto var = iter_var.GetAttr<tir::Var>("var");
+    auto iter_var = node.Downcast<tir::IterVar>();
+    auto var = iter_var.GetAttr(&tir::IterVarNode::var);
     TIRGeneralFrame new_frame(p->sym);
     WithCtx with_frame = p->WithFrame(new_frame);
 
     IdDoc var_doc = DefineVariable(var, new_frame);
 
     ExprDoc launch_thread_call = TIR(p)->Attr("launch_thread")->Call({var_doc, value_doc});
-    Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p);
+    Array<StmtDoc> body_docs = AsStmtDocArray(body, p);
 
-    return AsConciseScopedStmts(launch_thread_call, body, p->GetFrame<TIRFrame>().value());
+    return AsConciseScopedStmts(launch_thread_call, body_docs, p->GetFrame<TIRFrame>().value());
   } else {
     // General Form
-    auto node = stmt.GetAttr<ObjectRef>("node");
-    auto attr_key = stmt.GetAttr<String>("attr_key");
-
     ExprDoc attr_expr =
         TIR(p)->Attr("attr")->Call({p->AsExprDoc(node), LiteralDoc::Str(attr_key), value_doc});
-    Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p);
-    return AsConciseScopedStmts(attr_expr, body, p->GetFrame<TIRFrame>().value());
+    Array<StmtDoc> body_docs = AsStmtDocArray(body, p);
+    return AsConciseScopedStmts(attr_expr, body_docs, p->GetFrame<TIRFrame>().value());
   }
 }
 
@@ -430,14 +424,14 @@ StmtDoc PrintRegularLoop(const TracedObject<tir::For>& stmt, IRDocsifier p) {
   // TODO: consider moving to constructor
   frame->loops.push_back(stmt.Get());
 
-  auto loop_var = stmt.GetAttr<tir::Var>("loop_var");
+  auto loop_var = stmt.GetAttr(&tir::ForNode::loop_var);
   IdDoc loop_var_doc = DefineVariable(loop_var, frame);
 
   Array<ExprDoc> loop_var_vars;
   Array<String> loop_var_kwarg_keys;
   Array<ExprDoc> loop_var_kwarg_values;
-  auto min = stmt.GetAttr<PrimExpr>("min");
-  auto extent = stmt.GetAttr<PrimExpr>("extent");
+  auto min = stmt.GetAttr(&tir::ForNode::min);
+  auto extent = stmt.GetAttr(&tir::ForNode::extent);
   if (tir::is_zero(min.Get())) {
     auto extent_doc = p->AsExprDoc(extent);
     // Also source the doc to `min`, so that we have something to highlight
@@ -450,23 +444,23 @@ StmtDoc PrintRegularLoop(const TracedObject<tir::For>& stmt, IRDocsifier p) {
     auto max = MakeTraced(raw_max, extent.GetPath());
     loop_var_vars.push_back(p->AsExprDoc(max));
   }
-  auto thread_binding = stmt.GetAttr<Optional<tir::IterVar>>("thread_binding");
+  auto thread_binding = stmt.GetAttr(&tir::ForNode::thread_binding);
   if (thread_binding.defined()) {
     loop_var_kwarg_keys.push_back("thread");
     loop_var_kwarg_values.push_back(
-        LiteralDoc::Str(thread_binding.value().GetAttr<String>("thread_tag")));
+        LiteralDoc::Str(thread_binding.value().GetAttr(&tir::IterVarNode::thread_tag)));
   }
-  auto annotations = stmt.GetAttr<Map<String, ObjectRef>>("annotations");
+  auto annotations = stmt.GetAttr(&tir::ForNode::annotations);
   if (!annotations.empty()) {
     loop_var_kwarg_keys.push_back("annotations");
     loop_var_kwarg_values.push_back(AsDictDoc(annotations, p));
   }
-  auto kind = stmt.GetAttr<tir::ForKind>("kind");
+  auto kind = stmt.GetAttr(&tir::ForNode::kind);
   auto kind_str = kind.ApplyFunc(tir::ForKind2String);
   ExprDoc loop_var_rhs =
       TIR(p)->Attr(kind_str)->Call(loop_var_vars, loop_var_kwarg_keys, loop_var_kwarg_values);
 
-  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p);
+  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr(&tir::ForNode::body), p);
 
   return ForDoc(loop_var_doc, loop_var_rhs, body);
 }
@@ -479,21 +473,20 @@ StmtDoc PrintMergedSimpleLoops(const std::vector<TracedObject<tir::For>>& stmts,
   Array<ExprDoc> loop_var_extent_docs;
   for (const TracedObject<tir::For>& loop : stmts) {
     frame->loops.push_back(loop.Get());
-    auto loop_var = loop.GetAttr<tir::Var>("loop_var");
+    auto loop_var = loop.GetAttr(&tir::ForNode::loop_var);
     loop_var_docs.push_back(DefineVariable(loop_var, frame));
-    auto extent = loop.GetAttr<PrimExpr>("extent");
+    auto extent = loop.GetAttr(&tir::ForNode::extent);
     loop_var_extent_docs.push_back(p->AsExprDoc(extent));
   }
 
   ExprDoc loop_var_rhs = TIR(p)->Attr("grid")->Call(loop_var_extent_docs);
 
-  Array<StmtDoc> body = AsStmtDocArray(stmts.back().GetAttr<tir::Stmt>("body"), p);
+  Array<StmtDoc> body = AsStmtDocArray(stmts.back().GetAttr(&tir::ForNode::body), p);
 
   return ForDoc(TupleDoc(loop_var_docs), loop_var_rhs, body);
 }
 
-StmtDoc PrintFor(tir::For raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
+StmtDoc PrintFor(TracedObject<tir::For> stmt, IRDocsifier p) {
   std::vector<TracedObject<tir::For>> simple_loops;
 
   auto next_for = stmt;
@@ -503,7 +496,7 @@ StmtDoc PrintFor(tir::For raw_stmt, ObjectPath path, IRDocsifier p) {
     }
     simple_loops.push_back(next_for);
 
-    auto body = next_for.GetAttr<tir::Stmt>("body");
+    auto body = next_for.GetAttr(&tir::ForNode::body);
     if (!body.Get()->IsInstance<tir::ForNode>()) {
       break;
     }
@@ -520,14 +513,12 @@ StmtDoc PrintFor(tir::For raw_stmt, ObjectPath path, IRDocsifier p) {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::For>(PrintFor);
 
-StmtBlockDoc PrintBlock(tir::Block raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-
+StmtBlockDoc PrintBlock(TracedObject<tir::Block> stmt, IRDocsifier p) {
   TIRLoopFrame frame(p->sym);
   WithCtx with_frame = p->WithFrame(frame);
   Array<StmtDoc> body;
 
-  auto alloc_buffers = stmt.GetAttr<Array<tir::Buffer>>("alloc_buffers");
+  auto alloc_buffers = stmt.GetAttr(&tir::BlockNode::alloc_buffers);
 
   auto f_var_defined = [&p](const tir::VarNode* var) -> bool {
     return p->sym->IsObjectDefined(GetRef<tir::Var>(var));
@@ -548,10 +539,10 @@ StmtBlockDoc PrintBlock(tir::Block raw_stmt, ObjectPath path, IRDocsifier p) {
     body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
 
-  auto match_buffers = stmt.GetAttr<Array<tir::MatchBufferRegion>>("match_buffers");
+  auto match_buffers = stmt.GetAttr(&tir::BlockNode::match_buffers);
   for (auto match_buffer : match_buffers) {
-    auto buffer = match_buffer.GetAttr<tir::Buffer>("buffer");
-    auto source = match_buffer.GetAttr<tir::BufferRegion>("source");
+    auto buffer = match_buffer.GetAttr(&tir::MatchBufferRegionNode::buffer);
+    auto source = match_buffer.GetAttr(&tir::MatchBufferRegionNode::source);
 
     IdDoc lhs = DefineBuffer(buffer, frame);
     BufferPrintInfo info =
@@ -562,12 +553,12 @@ StmtBlockDoc PrintBlock(tir::Block raw_stmt, ObjectPath path, IRDocsifier p) {
     body.push_back(AssignDoc(lhs, rhs, NullOpt));
   }
 
-  auto init = stmt.GetAttr<Optional<tir::Stmt>>("init");
+  auto init = stmt.GetAttr(&tir::BlockNode::init);
   if (init.defined()) {
     body.push_back(ScopeDoc(TIR(p)->Attr("init")->Call({}), AsStmtDocArray(init.value(), p)));
   }
 
-  body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr<tir::Stmt>("body"), p));
+  body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr(&tir::BlockNode::body), p));
 
   return StmtBlockDoc(body);
 }
@@ -640,14 +631,14 @@ static String GetIterTypeStr(tir::IterVarType iter_type) {
 }
 
 AssignDoc PrintBlockVar(const BlockVarBinding& block_var_binding, IRDocsifier p) {
-  ExprDoc lhs = p->AsExprDoc(block_var_binding.lhs.GetAttr<tir::Var>("var"));
-  auto iter_type = block_var_binding.lhs.GetAttr<tir::IterVarType>("iter_type");
+  ExprDoc lhs = p->AsExprDoc(block_var_binding.lhs.GetAttr(&tir::IterVarNode::var));
+  auto iter_type = block_var_binding.lhs.GetAttr(&tir::IterVarNode::iter_type);
   auto iter_type_str = MakeTraced(GetIterTypeStr(iter_type.Get()), iter_type.GetPath());
 
   Array<ExprDoc> args;
-  auto dom = block_var_binding.lhs.GetAttr<Range>("dom");
-  auto min = dom.GetAttr<PrimExpr>("min");
-  auto extent = dom.GetAttr<PrimExpr>("extent");
+  auto dom = block_var_binding.lhs.GetAttr(&tir::IterVarNode::dom);
+  auto min = dom.GetAttr(&RangeNode::min);
+  auto extent = dom.GetAttr(&RangeNode::extent);
 
   if (tir::is_zero(min.Get())) {
     auto extent_doc = p->AsExprDoc(extent);
@@ -676,7 +667,7 @@ AssignDoc PrintGroupedSimpleRemappingBlockVars(
 
     iter_var_ids.emplace_back(p->AsExprDoc(iter_var));
 
-    auto iter_type = iter_var.GetAttr<tir::IterVarType>("iter_type");
+    auto iter_type = iter_var.GetAttr(&tir::IterVarNode::iter_type);
     if (iter_type.Get() == tir::kDataPar) {
       iter_type_str += "S";
     } else if (iter_type.Get() == tir::kCommReduce) {
@@ -699,9 +690,9 @@ AssignDoc PrintGroupedSimpleRemappingBlockVars(
 }
 
 Array<StmtDoc> PrintBlockVars(const TracedObject<tir::BlockRealize>& stmt, IRDocsifier p) {
-  auto block = stmt.GetAttr<tir::Block>("block");
-  auto iter_vars = block.GetAttr<Array<tir::IterVar>>("iter_vars");
-  auto iter_values = stmt.GetAttr<Array<PrimExpr>>("iter_values");
+  auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+  auto iter_vars = block.GetAttr(&tir::BlockNode::iter_vars);
+  auto iter_values = stmt.GetAttr(&tir::BlockRealizeNode::iter_values);
 
   Map<tir::Var, tir::For> loop_var_map = GetLoopVarMap(p);
   Array<StmtDoc> result;
@@ -719,20 +710,20 @@ Array<StmtDoc> PrintBlockVars(const TracedObject<tir::BlockRealize>& stmt, IRDoc
 
 Array<StmtDoc> PrintBlockAttrs(const TracedObject<tir::BlockRealize>& stmt, IRDocsifier p) {
   std::vector<ExprDoc> attr_exprs;
-  auto block = stmt.GetAttr<tir::Block>("block");
-  auto predicate = stmt.GetAttr<PrimExpr>("predicate");
+  auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+  auto predicate = stmt.GetAttr(&tir::BlockRealizeNode::predicate);
 
   if (!tir::is_one(predicate.Get())) {
     attr_exprs.emplace_back(TIR(p)->Attr("where")->Call({p->AsExprDoc(predicate)}));
   }
 
-  auto reads = block.GetAttr<Array<tir::BufferRegion>>("reads");
+  auto reads = block.GetAttr(&tir::BlockNode::reads);
   attr_exprs.push_back(TIR(p)->Attr("reads")->Call(AsExprDocArray(reads, p)));
 
-  auto writes = block.GetAttr<Array<tir::BufferRegion>>("writes");
+  auto writes = block.GetAttr(&tir::BlockNode::writes);
   attr_exprs.push_back(TIR(p)->Attr("writes")->Call(AsExprDocArray(writes, p)));
 
-  auto annotations = block.GetAttr<Map<String, ObjectRef>>("annotations");
+  auto annotations = block.GetAttr(&tir::BlockNode::annotations);
   if (!annotations.empty()) {
     attr_exprs.push_back(TIR(p)->Attr("block_attr")->Call({AsDictDoc(annotations, p)}));
   }
@@ -745,11 +736,9 @@ Array<StmtDoc> PrintBlockAttrs(const TracedObject<tir::BlockRealize>& stmt, IRDo
   return result;
 }
 
-StmtDoc PrintBlockRealize(tir::BlockRealize raw_stmt, ObjectPath path, IRDocsifier p) {
-  auto stmt = MakeTraced(raw_stmt, path);
-  auto block = stmt.GetAttr<tir::Block>("block");
-  // Note that the C++ object member is called "name_hint" but VisitAttrs uses just "name"
-  auto block_name_hint = block.GetAttr<String>("name_hint");
+StmtDoc PrintBlockRealize(TracedObject<tir::BlockRealize> stmt, IRDocsifier p) {
+  auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+  auto block_name_hint = block.GetAttr(&tir::BlockNode::name_hint);
 
   Array<ExprDoc> block_args;
   if (!block_name_hint.Get().empty()) {
@@ -759,8 +748,8 @@ StmtDoc PrintBlockRealize(tir::BlockRealize raw_stmt, ObjectPath path, IRDocsifi
 
   TIRGeneralFrame frame(p->sym);
   WithCtx with_frame = p->WithFrame(frame);
-  for (auto iter_var : block.GetAttr<Array<tir::IterVar>>("iter_vars")) {
-    auto var = iter_var.GetAttr<tir::Var>("var");
+  for (auto iter_var : block.GetAttr(&tir::BlockNode::iter_vars)) {
+    auto var = iter_var.GetAttr(&tir::IterVarNode::var);
     DefineVariable(var, frame);
   }
 
@@ -774,20 +763,20 @@ StmtDoc PrintBlockRealize(tir::BlockRealize raw_stmt, ObjectPath path, IRDocsifi
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BlockRealize>(PrintBlockRealize);
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::BufferRealize>([](tir::BufferRealize stmt, ObjectPath path,
+    .set_dispatch<tir::BufferRealize>([](TracedObject<tir::BufferRealize> stmt,
                                          IRDocsifier p) -> Doc {
       LOG(FATAL) << "TVM Script Printer Internal Error: All the BufferRealize should be folded "
                     "with Attr";
       throw;
     });
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::ProducerStore>([](tir::ProducerStore stmt, ObjectPath path,
+    .set_dispatch<tir::ProducerStore>([](TracedObject<tir::ProducerStore> stmt,
                                          IRDocsifier p) -> Doc {
       LOG(FATAL) << "ProducerStore cannot be printed";
       throw;
     });
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<tir::ProducerRealize>([](tir::ProducerRealize stmt, ObjectPath path,
+    .set_dispatch<tir::ProducerRealize>([](TracedObject<tir::ProducerRealize> stmt,
                                            IRDocsifier p) -> Doc {
       LOG(FATAL) << "ProducerRealize cannot be printed";
       throw;

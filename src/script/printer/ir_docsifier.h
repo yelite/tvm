@@ -120,7 +120,7 @@ class IRDocsifier : public ObjectRef {
  public:
   IRDocsifier(Map<String, String> ir_prefix);
 
-  using FType = ObjectFunctor<printer::Doc(const ObjectRef&, const ObjectPath&, IRDocsifier)>;
+  using FType = TracedObjectFunctor<printer::Doc, IRDocsifier>;
   TVM_DLL static FType& vtable();
 };
 

@@ -30,8 +30,7 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-ExprDoc PrintVar(tir::Var raw_var, ObjectPath path, IRDocsifier p) {
-  auto var = MakeTraced(raw_var, path);
+ExprDoc PrintVar(TracedObject<tir::Var> var, IRDocsifier p) {
   Optional<ExprDoc> var_doc = p->sym->GetObjectDoc(var);
   ICHECK_NOTNULL(var_doc);
   return var_doc.value();
@@ -39,15 +38,14 @@ ExprDoc PrintVar(tir::Var raw_var, ObjectPath path, IRDocsifier p) {
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Var>(PrintVar);
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::SizeVar>(PrintVar);
 
-ExprDoc PrintBuffer(tir::Buffer raw_buf, ObjectPath path, IRDocsifier p) {
-  auto buffer = MakeTraced(raw_buf, path);
+ExprDoc PrintBuffer(TracedObject<tir::Buffer> buffer, IRDocsifier p) {
   Optional<ExprDoc> buf_doc = p->sym->GetObjectDoc(buffer);
   ICHECK_NOTNULL(buf_doc);
   return buf_doc.value();
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Buffer>(PrintBuffer);
 
-ExprDoc PrintIterVar(tir::IterVar v, ObjectPath path, IRDocsifier p) {
+ExprDoc PrintIterVar(TracedObject<tir::IterVar> v, IRDocsifier p) {
   LOG(FATAL) << "Cannot print iter var directly. Please use the helper functions in tir.h for "
                 "specific usage of IterVar.";
   throw;

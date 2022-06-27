@@ -30,25 +30,21 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-ExprDoc PrintStringImm(tir::StringImm s, ObjectPath path, IRDocsifier p) {
-  return LiteralDoc::Str(MakeTraced(s->value, path));
+ExprDoc PrintStringImm(TracedObject<tir::StringImm> s, IRDocsifier p) {
+  auto value = s.GetAttr(&tir::StringImmNode::value);
+  return LiteralDoc::Str(value);
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::StringImm>(PrintStringImm);
 
-ExprDoc PrintIntImm(IntImm i, ObjectPath path, IRDocsifier p) {
-  return LiteralDoc::Int(MakeTraced(i, path));
-}
+ExprDoc PrintIntImm(TracedObject<IntImm> i, IRDocsifier p) { return LiteralDoc::Int(i); }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<IntImm>(PrintIntImm);
 
-ExprDoc PrintFloatImm(FloatImm f, ObjectPath path, IRDocsifier p) {
-  return LiteralDoc::Float(MakeTraced(f, path));
-}
+ExprDoc PrintFloatImm(TracedObject<FloatImm> f, IRDocsifier p) { return LiteralDoc::Float(f); }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<FloatImm>(PrintFloatImm);
 
-ExprDoc PrintCast(tir::Cast raw_cast, ObjectPath path, IRDocsifier p) {
-  auto cast = MakeTraced(raw_cast, path);
-  auto value = cast.GetAttr<PrimExpr>("value");
-  auto dtype = cast.GetAttr<DataType>("dtype");
+ExprDoc PrintCast(TracedObject<tir::Cast> cast, IRDocsifier p) {
+  auto value = cast.GetAttr(&tir::CastNode::value);
+  auto dtype = cast.GetAttr(&tir::CastNode::dtype);
   return TIR(p)->Attr("cast")->Call({p->AsExprDoc(value), DType2Literal(dtype)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Cast>(PrintCast);
@@ -57,10 +53,10 @@ template <typename BinOpType>
 OperationDocNode::Kind GetBinaryOpKind() { throw; }
 
 template <typename BinOpType>
-ExprDoc PrintBinOp(BinOpType raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto a = expr.template GetAttr<PrimExpr>("a");
-  auto b = expr.template GetAttr<PrimExpr>("b");
+ExprDoc PrintBinOp(TracedObject<BinOpType> expr, IRDocsifier p) {
+  using NodeType = typename BinOpType::ContainerType;
+  auto a = expr.GetAttr(&NodeType::a);
+  auto b = expr.GetAttr(&NodeType::b);
   return OperationDoc(GetBinaryOpKind<BinOpType>(), {p->AsExprDoc(a), p->AsExprDoc(b)});
 }
 
@@ -68,76 +64,70 @@ template<>
 OperationDocNode::Kind GetBinaryOpKind<tir::Add>() { return OperationDocNode::Kind::kAdd; }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Add>(PrintBinOp<tir::Add>);
 
-ExprDoc PrintSelect(tir::Select raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto condition = expr.GetAttr<PrimExpr>("condition");
-  auto true_value = expr.GetAttr<PrimExpr>("true_value");
-  auto false_value = expr.GetAttr<PrimExpr>("false_value");
+ExprDoc PrintSelect(TracedObject<tir::Select> expr, IRDocsifier p) {
+  auto condition = expr.GetAttr(&tir::SelectNode::condition);
+  auto true_value = expr.GetAttr(&tir::SelectNode::true_value);
+  auto false_value = expr.GetAttr(&tir::SelectNode::false_value);
   return TIR(p)->Attr("Select")->Call(
       {p->AsExprDoc(condition), p->AsExprDoc(true_value), p->AsExprDoc(false_value)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Select>(PrintSelect);
 
-ExprDoc PrintBufferLoad(tir::BufferLoad raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto buffer = expr.GetAttr<tir::Buffer>("buffer");
-  auto indices = expr.GetAttr<Array<PrimExpr>>("indices");
+ExprDoc PrintBufferLoad(TracedObject<tir::BufferLoad> expr, IRDocsifier p) {
+  auto buffer = expr.GetAttr(&tir::BufferLoadNode::buffer);
+  auto indices = expr.GetAttr(&tir::BufferLoadNode::indices);
 
   ExprDoc base = p->AsExprDoc(buffer);
   return base->Index(AsDocArray<Doc>(indices, p));
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BufferLoad>(PrintBufferLoad);
 
-ExprDoc PrintProducerLoad(tir::ProducerLoad e, ObjectPath path, IRDocsifier p) {
+ExprDoc PrintProducerLoad(TracedObject<tir::ProducerLoad> e, IRDocsifier p) {
   LOG(FATAL) << "Cannot print a tir.ProducerLoad as it is not valid in TIR Primfuncs. You need to "
                 "lower this function first.";
   throw;
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::ProducerLoad>(PrintProducerLoad);
 
-ExprDoc PrintLoad(tir::Load e, ObjectPath path, IRDocsifier p) {
+ExprDoc PrintLoad(TracedObject<tir::Load> e, IRDocsifier p) {
   LOG(FATAL) << "Cannot print a tir.Load";
   throw;
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Load>(PrintLoad);
 
-ExprDoc PrintRamp(tir::Ramp raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto base = expr.GetAttr<PrimExpr>("base");
-  auto stride = expr.GetAttr<PrimExpr>("stride");
-  auto lanes = expr.GetAttr<int>("lanes");
+ExprDoc PrintRamp(TracedObject<tir::Ramp> expr, IRDocsifier p) {
+  auto base = expr.GetAttr(&tir::RampNode::base);
+  auto stride = expr.GetAttr(&tir::RampNode::stride);
+  auto lanes = expr.GetAttr(&tir::RampNode::lanes);
   return TIR(p)->Attr("ramp")->Call(
       {p->AsExprDoc(base), p->AsExprDoc(stride), LiteralDoc::Int(lanes)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Ramp>(PrintRamp);
 
-ExprDoc PrintBroadcast(tir::Broadcast raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto value = expr.GetAttr<PrimExpr>("value");
-  auto lanes = expr.GetAttr<int>("lanes");
+ExprDoc PrintBroadcast(TracedObject<tir::Broadcast> expr, IRDocsifier p) {
+  auto value = expr.GetAttr(&tir::BroadcastNode::value);
+  auto lanes = expr.GetAttr(&tir::BroadcastNode::lanes);
   return TIR(p)->Attr("broadcast")->Call({p->AsExprDoc(value), LiteralDoc::Int(lanes)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Broadcast>(PrintBroadcast);
 
-ExprDoc PrintLet(tir::Let raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto var = expr.GetAttr<tir::Var>("var");
-  auto value = expr.GetAttr<PrimExpr>("value");
-  auto body = expr.GetAttr<PrimExpr>("body");
+ExprDoc PrintLet(TracedObject<tir::Let> expr, IRDocsifier p) {
+  auto var = expr.GetAttr(&tir::LetNode::var);
+  auto value = expr.GetAttr(&tir::LetNode::value);
+  auto body = expr.GetAttr(&tir::LetNode::body);
   return TIR(p)->Attr("let")->Call({p->AsExprDoc(var), p->AsExprDoc(value), p->AsExprDoc(body)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Let>(PrintLet);
 
-ExprDoc PrintCall(tir::Call raw_call, ObjectPath path, IRDocsifier p) {
-  auto call = MakeTraced(raw_call, path);
-  auto op = call.GetAttr<RelayExpr>("op");
+ExprDoc PrintCall(TracedObject<tir::Call> call, IRDocsifier p) {
+  auto op = call.GetAttr(&tir::CallNode::op);
 
   if (op.Get()->IsInstance<OpNode>()) {
     return PrintOpCall(call, p);
   } else {
     auto op_gvar = op.Downcast<GlobalVar>();
-    auto name_hint = op_gvar.GetAttr<String>("name_hint");
-    auto args = call.GetAttr<Array<PrimExpr>>("args");
+    auto name_hint = op_gvar.GetAttr(&GlobalVarNode::name_hint);
+    auto args = call.GetAttr(&tir::CallNode::args);
 
     IdDoc name_doc(name_hint.Get());
     name_doc->paths.push_back(name_hint.GetPath());
@@ -147,21 +137,19 @@ ExprDoc PrintCall(tir::Call raw_call, ObjectPath path, IRDocsifier p) {
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Call>(PrintCall);
 
-ExprDoc PrintShuffle(tir::Shuffle raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto vectors = expr.GetAttr<Array<PrimExpr>>("vectors");
-  auto indices = expr.GetAttr<Array<PrimExpr>>("indices");
+ExprDoc PrintShuffle(TracedObject<tir::Shuffle> expr, IRDocsifier p) {
+  auto vectors = expr.GetAttr(&tir::ShuffleNode::vectors);
+  auto indices = expr.GetAttr(&tir::ShuffleNode::indices);
   return TIR(p)->Attr("shuffle")->Call({AsListDoc(vectors, p), AsListDoc(indices, p)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Shuffle>(PrintShuffle);
 
-ExprDoc PrintCommReducer(tir::CommReducer raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
+ExprDoc PrintCommReducer(TracedObject<tir::CommReducer> expr, IRDocsifier p) {
   TIRGeneralFrame frame(p->sym);
   WithCtx with_frame = p->WithFrame(frame);
 
-  auto lhs = expr.GetAttr<Array<tir::Var>>("lhs");
-  auto rhs = expr.GetAttr<Array<tir::Var>>("rhs");
+  auto lhs = expr.GetAttr(&tir::CommReducerNode::lhs);
+  auto rhs = expr.GetAttr(&tir::CommReducerNode::rhs);
 
   Array<IdDoc> reducer_args;
   for (TracedObject<tir::Var> v_lhs : lhs) {
@@ -173,13 +161,13 @@ ExprDoc PrintCommReducer(tir::CommReducer raw_expr, ObjectPath path, IRDocsifier
     reducer_args.push_back(var_doc);
   }
 
-  auto result = expr.GetAttr<Array<PrimExpr>>("result");
+  auto result = expr.GetAttr(&tir::CommReducerNode::result);
 
   ExprDoc reducer_body = rhs.size() == 1 ? p->AsExprDoc(result[0]) : AsTupleDoc(result, p);
 
   LambdaDoc reducer{reducer_args, reducer_body};
 
-  auto identity_element = expr.GetAttr<Array<PrimExpr>>("identity_element");
+  auto identity_element = expr.GetAttr(&tir::CommReducerNode::identity_element);
   ListDoc identity_elements_doc = AsListDoc(identity_element, p);
 
   return TIR(p)->Attr("comm_reducer")->Call({reducer, identity_elements_doc});
@@ -187,42 +175,39 @@ ExprDoc PrintCommReducer(tir::CommReducer raw_expr, ObjectPath path, IRDocsifier
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::CommReducer>(PrintCommReducer);
 
-ExprDoc PrintReduce(tir::Reduce raw_expr, ObjectPath path, IRDocsifier p) {
-  auto expr = MakeTraced(raw_expr, path);
-  auto combiner = expr.GetAttr<tir::CommReducer>("combiner");
-  auto source = expr.GetAttr<Array<PrimExpr>>("source");
-  auto axis = expr.GetAttr<Array<tir::IterVar>>("axis");
-  auto value_index = expr.GetAttr<int>("value_index");
+ExprDoc PrintReduce(TracedObject<tir::Reduce> expr, IRDocsifier p) {
+  auto combiner = expr.GetAttr(&tir::ReduceNode::combiner);
+  auto source = expr.GetAttr(&tir::ReduceNode::source);
+  auto axis = expr.GetAttr(&tir::ReduceNode::axis);
+  auto value_index = expr.GetAttr(&tir::ReduceNode::value_index);
   return TIR(p)->Attr("reduce")->Call({p->AsExprDoc(combiner), AsListDoc(source, p),
                                        AsListDoc(axis, p), LiteralDoc::Int(value_index)});
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Reduce>(PrintReduce);
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<Range>([](Range raw_expr, ObjectPath path, IRDocsifier p) {
-      auto expr = MakeTraced(raw_expr, path);
-      auto min = expr.GetAttr<PrimExpr>("min");
-      auto extent = expr.GetAttr<PrimExpr>("extent");
+    .set_dispatch<Range>([](TracedObject<Range> expr, IRDocsifier p) {
+      auto min = expr.GetAttr(&RangeNode::min);
+      auto extent = expr.GetAttr(&RangeNode::extent);
       auto max = MakeTraced(min.Get() + extent.Get(), extent.GetPath());
       return SliceDoc(p->AsExprDoc(min), p->AsExprDoc(max));
     });
 
-ExprDoc PrintAny(tir::Any e, ObjectPath path, IRDocsifier p) {
+ExprDoc PrintAny(TracedObject<tir::Any> e, IRDocsifier p) {
   LOG(FATAL) << "Cannot print any shape";
   throw;
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Any>(PrintAny);
 
-ExprDoc PrintBufferRegion(tir::BufferRegion raw_buffer_region, ObjectPath path, IRDocsifier p) {
-  auto buffer_region = MakeTraced(raw_buffer_region, path);
-  auto region = buffer_region.GetAttr<Array<Range>>("region");
+ExprDoc PrintBufferRegion(TracedObject<tir::BufferRegion> buffer_region, IRDocsifier p) {
+  auto region = buffer_region.GetAttr(&tir::BufferRegionNode::region);
 
   Array<Doc> indices;
 
   for (TracedObject<Range> range : region) {
-    auto extent = range.GetAttr<PrimExpr>("extent");
+    auto extent = range.GetAttr(&RangeNode::extent);
     if (tir::is_one(extent.Get())) {
-      auto index = p->AsExprDoc(range.GetAttr<PrimExpr>("min"));
+      auto index = p->AsExprDoc(range.GetAttr(&RangeNode::min));
       index->paths.push_back(extent.GetPath());
       indices.push_back(std::move(index));
     } else {
@@ -230,7 +215,7 @@ ExprDoc PrintBufferRegion(tir::BufferRegion raw_buffer_region, ObjectPath path, 
     }
   }
 
-  auto buffer = buffer_region.GetAttr<tir::Buffer>("buffer");
+  auto buffer = buffer_region.GetAttr(&tir::BufferRegionNode::buffer);
   return p->AsExprDoc(buffer)->Index(indices);
 }
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::BufferRegion>(PrintBufferRegion);

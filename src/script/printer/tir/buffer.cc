@@ -89,9 +89,9 @@ ExprDoc BufferPrintInfo::AsCall(
 }
 
 static Optional<ExprDoc> GetBufferScope(const TracedObject<tir::Buffer>& buffer) {
-  auto data = buffer.GetAttr<tir::Var>("data");
-  auto type = data.GetAttr<PointerType>("type_annotation");
-  auto scope = type.GetAttr<String>("storage_scope");
+  auto data = buffer.GetAttr(&tir::BufferNode::data);
+  auto type = data.GetAttr(&tir::VarNode::type_annotation).Downcast<PointerType>();
+  auto scope = type.GetAttr(&PointerTypeNode::storage_scope);
   if (scope.Get().empty() || scope.Get() == "global") {
     return NullOpt;
   } else {
@@ -100,7 +100,7 @@ static Optional<ExprDoc> GetBufferScope(const TracedObject<tir::Buffer>& buffer)
 }
 
 static Optional<ExprDoc> GetBufferDtype(const TracedObject<tir::Buffer>& buffer) {
-  auto dtype = buffer.GetAttr<DataType>("dtype");
+  auto dtype = buffer.GetAttr(&tir::BufferNode::dtype);
   if (dtype.Get() == DataType::Float(32)) {
     return NullOpt;
   } else {
@@ -110,7 +110,7 @@ static Optional<ExprDoc> GetBufferDtype(const TracedObject<tir::Buffer>& buffer)
 
 static TracedOptional<tir::Var> GetBufferData(const TracedObject<tir::Buffer>& buffer,
                                               const AssociatedVariables& associated_vars) {
-  auto data = buffer.GetAttr<tir::Var>("data");
+  auto data = buffer.GetAttr(&tir::BufferNode::data);
   if (associated_vars.IsAssociatedWith(data.Get(), buffer.Get())) {
     return TracedOptional<tir::Var>(NullOpt, data.GetPath());
   } else {
@@ -119,7 +119,7 @@ static TracedOptional<tir::Var> GetBufferData(const TracedObject<tir::Buffer>& b
 }
 
 static TracedOptional<Array<PrimExpr>> GetBufferStrides(const TracedObject<tir::Buffer>& buffer) {
-  auto strides = buffer.GetAttr<Array<PrimExpr>>("strides");
+  auto strides = buffer.GetAttr(&tir::BufferNode::strides);
   if (!strides.empty()) {
     return TracedOptional<Array<PrimExpr>>(strides);
   } else {
@@ -129,7 +129,7 @@ static TracedOptional<Array<PrimExpr>> GetBufferStrides(const TracedObject<tir::
 
 static TracedOptional<PrimExpr> GetBufferElemOffset(const TracedObject<tir::Buffer>& buffer,
                                                     const AssociatedVariables& associated_vars) {
-  auto elem_offset = buffer.GetAttr<PrimExpr>("elem_offset");
+  auto elem_offset = buffer.GetAttr(&tir::BufferNode::elem_offset);
   if (elem_offset.defined()) {
     // Don't print the offset if it is an associated variable
     if (elem_offset.IsInstance<tir::Var>() &&
@@ -148,7 +148,7 @@ static TracedOptional<PrimExpr> GetBufferElemOffset(const TracedObject<tir::Buff
 }
 
 static Optional<ExprDoc> GetBufferAlignment(const TracedObject<tir::Buffer>& buffer) {
-  auto data_alignment = buffer.GetAttr<int>("data_alignment");
+  auto data_alignment = buffer.GetAttr(&tir::BufferNode::data_alignment);
   if (data_alignment.Get() != runtime::kAllocAlignment) {
     return LiteralDoc::Int(data_alignment);
   } else {
@@ -157,7 +157,7 @@ static Optional<ExprDoc> GetBufferAlignment(const TracedObject<tir::Buffer>& buf
 }
 
 static Optional<ExprDoc> GetBufferOffsetFactor(const TracedObject<tir::Buffer>& buffer) {
-  auto offset_factor = buffer.GetAttr<int>("offset_factor");
+  auto offset_factor = buffer.GetAttr(&tir::BufferNode::offset_factor);
   if (offset_factor.Get() != 1) {
     return LiteralDoc::Int(offset_factor);
   } else {
@@ -166,7 +166,7 @@ static Optional<ExprDoc> GetBufferOffsetFactor(const TracedObject<tir::Buffer>& 
 }
 
 static Optional<ExprDoc> GetBufferType(const TracedObject<tir::Buffer>& buffer) {
-  auto buffer_type = buffer.GetAttr<tir::BufferType>("buffer_type");
+  auto buffer_type = buffer.GetAttr(&tir::BufferNode::buffer_type);
   if (buffer_type.Get() != tir::BufferType::kDefault) {
     return LiteralDoc::Str(MakeTraced(String("auto"), buffer_type.GetPath()));
   } else {
@@ -201,20 +201,20 @@ std::vector<BufferPrintInfo> GetBufferPrintInfo(
     check_associated_def(buffer.Get()->elem_offset, buffer.Get());
   }
   for (TracedObject<Buffer> buffer : buffers) {
-    auto shape = buffer.GetAttr<Array<PrimExpr>>("shape");
+    auto shape = buffer.GetAttr(&tir::BufferNode::shape);
     std::for_each(shape.begin(), shape.end(), check_explicit_def);
 
-    auto strides = buffer.GetAttr<Array<PrimExpr>>("strides");
+    auto strides = buffer.GetAttr(&tir::BufferNode::strides);
     std::for_each(strides.begin(), strides.end(), check_explicit_def);
 
-    check_explicit_def(buffer.GetAttr<Var>("data"));
-    check_explicit_def(buffer.GetAttr<PrimExpr>("elem_offset"));
+    check_explicit_def(buffer.GetAttr(&tir::BufferNode::data));
+    check_explicit_def(buffer.GetAttr(&tir::BufferNode::elem_offset));
   }
   std::vector<BufferPrintInfo> results;
   for (TracedObject<Buffer> buffer : buffers) {
     results.push_back(
         BufferPrintInfo{/* .buffer = */ buffer,
-                        /* .shape = */ buffer.GetAttr<Array<PrimExpr>>("shape"),
+                        /* .shape = */ buffer.GetAttr(&tir::BufferNode::shape),
                         /* .dtype = */ GetBufferDtype(buffer),
                         /* .data = */ GetBufferData(buffer, associated_vars),
                         /* .strides = */ GetBufferStrides(buffer),

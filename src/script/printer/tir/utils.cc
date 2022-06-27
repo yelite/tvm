@@ -27,11 +27,11 @@ namespace script {
 namespace printer {
 
 ExprDoc GetTypeAnnotationDocForVar(const TracedObject<tir::Var>& var, const IRDocsifier& p) {
-  auto type_annotation = var.GetAttr<Type>("type_annotation");
+  auto type_annotation = var.GetAttr(&tir::VarNode::type_annotation);
   if (type_annotation.Get().defined()) {
     return p->AsExprDoc(type_annotation);
   } else {
-    auto dtype = var.GetAttr<DataType>("dtype");
+    auto dtype = var.GetAttr(&tir::VarNode::dtype);
     Type raw_type = GetTypeFromRuntimeDataType(dtype.Get());
     return p->AsExprDoc(MakeTraced(raw_type, dtype.GetPath()));
   }

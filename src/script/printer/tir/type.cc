@@ -26,32 +26,28 @@ namespace script {
 namespace printer {
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<PrimType>("tir", [](PrimType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
-      auto ty = MakeTraced(raw_ty, path);
-      auto dtype = ty.GetAttr<DataType>("dtype");
+    .set_dispatch<PrimType>("tir", [](TracedObject<PrimType> ty, IRDocsifier p) -> Doc {
+      auto dtype = ty.GetAttr(&PrimTypeNode::dtype);
       String ty_str = runtime::DLDataType2String(dtype.Get());
       return TIR(p)->Attr(MakeTraced(ty_str, ty.GetPath()));
     });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<PointerType>(
-        "tir", [](PointerType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
-          auto ty = MakeTraced(raw_ty, path);
-          auto element_type = ty.GetAttr<Type>("element_type");
-          auto storage_scope = ty.GetAttr<String>("storage_scope");
+    .set_dispatch<PointerType>("tir", [](TracedObject<PointerType> ty, IRDocsifier p) -> Doc {
+      auto element_type = ty.GetAttr(&PointerTypeNode::element_type);
+      auto storage_scope = ty.GetAttr(&PointerTypeNode::storage_scope);
 
-          ExprDoc element_type_doc = p->AsDoc<ExprDoc>(element_type);
-          if (storage_scope.Get().empty()) {
-            return TIR(p)->Attr("Ptr")->Call({element_type_doc});
-          } else {
-            return TIR(p)->Attr("Ptr")->Call({element_type_doc, LiteralDoc::Str(storage_scope)});
-          }
-        });
+      ExprDoc element_type_doc = p->AsDoc<ExprDoc>(element_type);
+      if (storage_scope.Get().empty()) {
+        return TIR(p)->Attr("Ptr")->Call({element_type_doc});
+      } else {
+        return TIR(p)->Attr("Ptr")->Call({element_type_doc, LiteralDoc::Str(storage_scope)});
+      }
+    });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
-    .set_dispatch<TupleType>("tir", [](TupleType raw_ty, ObjectPath path, IRDocsifier p) -> Doc {
-      auto ty = MakeTraced(raw_ty, path);
-      auto fields = ty.GetAttr<Array<Type>>("fields");
+    .set_dispatch<TupleType>("tir", [](TracedObject<TupleType> ty, IRDocsifier p) -> Doc {
+      auto fields = ty.GetAttr(&TupleTypeNode::fields);
 
       if (fields.empty()) {
         return LiteralDoc::None(fields.GetPath());
