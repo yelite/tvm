@@ -196,7 +196,7 @@ bool SEqualReducer::ObjectAttrsEqual(const ObjectRef& lhs, const ObjectRef& rhs,
 class RemapVarSEqualHandler : public SEqualReducer::Handler {
  public:
   explicit RemapVarSEqualHandler(bool assert_mode, FirstMismatch* first_mismatch)
-      : assert_mode_(assert_mode), first_mismatch(first_mismatch) {}
+      : assert_mode_(assert_mode), first_mismatch_(first_mismatch) {}
 
   bool SEqualReduce(const ObjectRef& lhs, const ObjectRef& rhs, bool map_free_vars,
                     const ObjectPathPair& current_paths) final {
@@ -259,7 +259,7 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
     equal_map_rhs_.clear();
 
     ObjectPathPair current_paths;
-    if (first_mismatch != nullptr) {
+    if (IsPathTracingEnabled()) {
       current_paths.lhs_path = current_paths.rhs_path = ObjectPath::Root();
     }
     if (!SEqualReduce(lhs, rhs, map_free_vars, current_paths)) {
@@ -277,8 +277,8 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
   // Check the result.
   bool CheckResult(bool result, const ObjectRef& lhs, const ObjectRef& rhs,
                    const ObjectPathPair& current_paths) {
-    if (first_mismatch != nullptr && !result) {
-      first_mismatch->MaybeStoreMismatch(current_paths);
+    if (IsPathTracingEnabled() && !result) {
+      first_mismatch_->MaybeStoreMismatch(current_paths);
     }
     if (assert_mode_ && !result) {
       LOG(FATAL) << "ValueError: StructuralEqual check failed, caused by lhs:" << std::endl
@@ -299,8 +299,8 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
       auto& entry = task_stack_.back();
 
       if (entry.force_fail) {
-        if (first_mismatch != nullptr) {
-          first_mismatch->MaybeStoreMismatch(entry.current_paths);
+        if (IsPathTracingEnabled()) {
+          first_mismatch_->MaybeStoreMismatch(entry.current_paths);
         }
         return false;
       }
@@ -356,11 +356,11 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
       if (equal_map_rhs_.count(rhs)) return false;
 
       // Run reduce check for free nodes.
-      if (first_mismatch == nullptr) {
+      if (!IsPathTracingEnabled()) {
         return vtable_->SEqualReduce(lhs.get(), rhs.get(),
                                      SEqualReducer(this, nullptr, map_free_vars));
       } else {
-        PathTracingData tracing_data = {current_paths, lhs, rhs, first_mismatch};
+        PathTracingData tracing_data = {current_paths, lhs, rhs, first_mismatch_};
         return vtable_->SEqualReduce(lhs.get(), rhs.get(),
                                      SEqualReducer(this, &tracing_data, map_free_vars));
       }
@@ -394,6 +394,9 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
     Task(ForceFailTag, const ObjectPathPair& current_paths)
         : current_paths(current_paths), force_fail(true) {}
   };
+
+  bool IsPathTracingEnabled() const { return first_mismatch_ != nullptr; }
+
   // list of pending tasks to be pushed to the stack.
   std::vector<Task> pending_tasks_;
   // Internal task stack to executed the task.
@@ -403,7 +406,7 @@ class RemapVarSEqualHandler : public SEqualReducer::Handler {
   //  If in assert mode, must return true, and will throw error otherwise.
   bool assert_mode_{false};
   // Location to store the paths to the first detected mismatch, or nullptr to disable path tracing.
-  FirstMismatch* first_mismatch;
+  FirstMismatch* first_mismatch_;
   // reflection vtable
   ReflectionVTable* vtable_ = ReflectionVTable::Global();
   // map from lhs to rhs
