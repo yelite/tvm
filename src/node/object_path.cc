@@ -135,7 +135,7 @@ bool ObjectPath::PathsEqual(const ObjectPath& other) const {
     if (lhs->type_index() != rhs->type_index()) {
       return false;
     }
-    if (!lhs->LastNodeEqual(*rhs)) {
+    if (!lhs->LastNodeEqual(rhs)) {
       return false;
     }
     lhs = lhs->ParentNode();
@@ -171,7 +171,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable).set_dispatch<ObjectPathNode>(PrintObj
 
 RootPathNode::RootPathNode() : ObjectPathNode(nullptr) {}
 
-bool RootPathNode::LastNodeEqual(const ObjectPathNode& other) const { return true; }
+bool RootPathNode::LastNodeEqual(const ObjectPathNode* other) const { return true; }
 
 std::string RootPathNode::LastNodeString() const { return "<root>"; }
 
@@ -182,9 +182,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable).set_dispatch<RootPathNode>(PrintObjec
 AttributeAccessPathNode::AttributeAccessPathNode(ObjectPathNode* parent, String attr_key)
     : ObjectPathNode(parent), attr_key(std::move(attr_key)) {}
 
-bool AttributeAccessPathNode::LastNodeEqual(const ObjectPathNode& other) const {
-  const auto& otherAttrAccess = static_cast<const AttributeAccessPathNode&>(other);
-  return attr_key == otherAttrAccess.attr_key;
+bool AttributeAccessPathNode::LastNodeEqual(const ObjectPathNode* other) const {
+  const auto* otherAttrAccess = static_cast<const AttributeAccessPathNode*>(other);
+  return attr_key == otherAttrAccess->attr_key;
 }
 
 std::string AttributeAccessPathNode::LastNodeString() const { return "." + attr_key; }
@@ -197,7 +197,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
 UnknownAttributeAccessPathNode::UnknownAttributeAccessPathNode(ObjectPathNode* parent)
     : ObjectPathNode(parent) {}
 
-bool UnknownAttributeAccessPathNode::LastNodeEqual(const ObjectPathNode& other) const {
+bool UnknownAttributeAccessPathNode::LastNodeEqual(const ObjectPathNode* other) const {
   // Consider any two unknown attribute accesses unequal
   return false;
 }
@@ -214,9 +214,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
 ArrayIndexPathNode::ArrayIndexPathNode(ObjectPathNode* parent, size_t index)
     : ObjectPathNode(parent), index(index) {}
 
-bool ArrayIndexPathNode::LastNodeEqual(const ObjectPathNode& other) const {
-  const auto& otherArrayIndex = static_cast<const ArrayIndexPathNode&>(other);
-  return index == otherArrayIndex.index;
+bool ArrayIndexPathNode::LastNodeEqual(const ObjectPathNode* other) const {
+  const auto* otherArrayIndex = static_cast<const ArrayIndexPathNode*>(other);
+  return index == otherArrayIndex->index;
 }
 
 std::string ArrayIndexPathNode::LastNodeString() const { return "[" + std::to_string(index) + "]"; }
@@ -228,9 +228,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable).set_dispatch<ArrayIndexPathNode>(Prin
 MissingArrayElementPathNode::MissingArrayElementPathNode(ObjectPathNode* parent, size_t index)
     : ObjectPathNode(parent), index(index) {}
 
-bool MissingArrayElementPathNode::LastNodeEqual(const ObjectPathNode& other) const {
-  const auto& otherMissingElement = static_cast<const MissingArrayElementPathNode&>(other);
-  return index == otherMissingElement.index;
+bool MissingArrayElementPathNode::LastNodeEqual(const ObjectPathNode* other) const {
+  const auto* otherMissingElement = static_cast<const MissingArrayElementPathNode*>(other);
+  return index == otherMissingElement->index;
 }
 
 std::string MissingArrayElementPathNode::LastNodeString() const {
@@ -245,9 +245,9 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable)
 MapValuePathNode::MapValuePathNode(ObjectPathNode* parent, ObjectRef key)
     : ObjectPathNode(parent), key(std::move(key)) {}
 
-bool MapValuePathNode::LastNodeEqual(const ObjectPathNode& other) const {
-  const auto& otherMapValue = static_cast<const MapValuePathNode&>(other);
-  return ObjectEqual()(key, otherMapValue.key);
+bool MapValuePathNode::LastNodeEqual(const ObjectPathNode* other) const {
+  const auto* otherMapValue = static_cast<const MapValuePathNode*>(other);
+  return ObjectEqual()(key, otherMapValue->key);
 }
 
 std::string MapValuePathNode::LastNodeString() const {
@@ -262,7 +262,7 @@ TVM_STATIC_IR_FUNCTOR(ReprPrinter, vtable).set_dispatch<MapValuePathNode>(PrintO
 
 MissingMapEntryPathNode::MissingMapEntryPathNode(ObjectPathNode* parent) : ObjectPathNode(parent) {}
 
-bool MissingMapEntryPathNode::LastNodeEqual(const ObjectPathNode& other) const { return true; }
+bool MissingMapEntryPathNode::LastNodeEqual(const ObjectPathNode* other) const { return true; }
 
 std::string MissingMapEntryPathNode::LastNodeString() const { return "[<missing entry>]"; }
 
