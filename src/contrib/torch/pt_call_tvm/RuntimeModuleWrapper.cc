@@ -33,6 +33,7 @@
 
 #include "../../../runtime/graph_executor/graph_executor_factory.h"
 #include "../base64.h"
+#include "./dlpack_ext.h"
 
 namespace tvm {
 namespace contrib {
@@ -179,9 +180,9 @@ class GraphExecutorFactoryWrapper : public torch::jit::CustomClassHolder {
       executor_ = tmp(input_device);
     }
 
-    std::vector<DLManagedTensor*> tensors;
+    std::vector<tvm::runtime::NDArray> tensors;
 
-    for (int i = 0; i < input_length; ++i) tensors.push_back(toDLPack(inputs[i]));
+    for (int i = 0; i < input_length; ++i) tensors.push_back(toTvmNDArray(inputs[i]));
 
     tvm::runtime::PackedFunc run = executor_.GetFunction("run");
     tvm::runtime::PackedFunc set_input = executor_.GetFunction("set_input");
@@ -189,7 +190,7 @@ class GraphExecutorFactoryWrapper : public torch::jit::CustomClassHolder {
     tvm::runtime::PackedFunc get_num_outputs = executor_.GetFunction("get_num_outputs");
 
     for (int k = 0; k < input_length; ++k) {
-      set_input(k, &tensors[k]->dl_tensor);
+      set_input(k, tensors[k]);
     }
 
     run();
@@ -201,13 +202,10 @@ class GraphExecutorFactoryWrapper : public torch::jit::CustomClassHolder {
 
     for (int k = 0; k < output_length; ++k) {
       tvm::runtime::NDArray results = get_output(k);
-      at::Tensor atTensor = at::fromDLPack(results.ToDLPack());
+      at::Tensor atTensor = toTorchTensor(results);
       outputs.emplace_back(atTensor);
     }
 
-    for (int k = 0; k < input_length; ++k) {
-      tensors[k]->deleter(tensors[k]);
-    }
     return outputs;
   }
 
