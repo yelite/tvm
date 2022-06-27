@@ -42,76 +42,6 @@ class TracedBasicValue;
 
 namespace detail {
 
-template <typename T>
-struct TypedAttrGetter : public AttrVisitor {
-  const char* desired_key;
-  const T* found_attr;
-
-  explicit TypedAttrGetter(const char* desired_key)
-      : desired_key(desired_key), found_attr(nullptr) {}
-
-  void Visit(const char* key, double* value) final { DoVisit(key, value); }
-  void Visit(const char* key, int64_t* value) final { DoVisit(key, value); }
-  void Visit(const char* key, uint64_t* value) final { DoVisit(key, value); }
-  void Visit(const char* key, int* value) final { DoVisit(key, value); }
-  void Visit(const char* key, bool* value) final { DoVisit(key, value); }
-  void Visit(const char* key, void** value) final { DoVisit(key, value); }
-  void Visit(const char* key, DataType* value) final { DoVisit(key, value); }
-  void Visit(const char* key, std::string* value) final { DoVisit(key, value); }
-  void Visit(const char* key, runtime::NDArray* value) final { DoVisit(key, value); }
-  void Visit(const char* key, ObjectRef* value) final { DoVisit(key, value); }
-
- private:
-  void DoVisit(const char* key, const T* value) {
-    if (!strcmp(desired_key, key)) {
-      found_attr = value;
-    }
-  }
-
-  template <typename U>
-  void DoVisit(const char* key, const U*) {
-    if (!strcmp(desired_key, key)) {
-      LOG(FATAL) << "Attribute '" << key << "' is present but has wrong type";
-    }
-  }
-};
-
-template <typename T, bool IsObject = std::is_base_of<ObjectRef, T>::value,
-          bool IsEnum = std::is_enum<T>::value>
-struct GetTypedAttr;
-
-template <typename T>
-struct GetTypedAttr<T, true, false> {
-  T operator()(const ObjectRef& object, const char* attr_key) const {
-    TypedAttrGetter<ObjectRef> visitor(attr_key);
-    ReflectionVTable::Global()->VisitAttrs(const_cast<Object*>(object.get()), &visitor);
-    ICHECK(visitor.found_attr != nullptr) << "No such attribute '" << attr_key << "'";
-    return Downcast<T>(*visitor.found_attr);
-  }
-};
-
-template <typename T>
-struct GetTypedAttr<T, false, false> {
-  const T& operator()(const ObjectRef& object, const char* attr_key) const {
-    TypedAttrGetter<T> visitor(attr_key);
-    ReflectionVTable::Global()->VisitAttrs(const_cast<Object*>(object.get()), &visitor);
-    ICHECK(visitor.found_attr != nullptr) << "No such attribute '" << attr_key << "'";
-    return *visitor.found_attr;
-  }
-};
-
-template <typename T>
-struct GetTypedAttr<T, false, true> {
-  const T& operator()(const ObjectRef& object, const char* attr_key) const {
-    static_assert(std::is_same<int, typename std::underlying_type<T>::type>::value);
-
-    TypedAttrGetter<int> visitor(attr_key);
-    ReflectionVTable::Global()->VisitAttrs(const_cast<Object*>(object.get()), &visitor);
-    ICHECK(visitor.found_attr != nullptr) << "No such attribute '" << attr_key << "'";
-    return *reinterpret_cast<const T*>(visitor.found_attr);
-  }
-};
-
 template <typename T, bool IsObject = std::is_base_of<ObjectRef, T>::value>
 struct TracedObjectWrapperSelector;
 
@@ -144,6 +74,8 @@ struct TracedObjectWrapperSelector<Optional<T>, true> {
 
 template <typename RefT>
 class TracedObject {
+  using ObjectType = typename RefT::ContainerType;
+
  public:
   explicit TracedObject(const RefT& object_ref, ObjectPath path)
       : ref_(object_ref), path_(std::move(path)) {}
@@ -152,10 +84,13 @@ class TracedObject {
   TracedObject(const TracedObject<DerivedRef>& derived)
       : ref_(derived.Get()), path_(derived.GetPath()) {}
 
-  template <typename T>
-  typename detail::TracedObjectWrapperSelector<T>::Type GetAttr(const char* attr_key) const {
+  template <typename T, typename BaseType>
+  typename detail::TracedObjectWrapperSelector<T>::Type GetAttr(T BaseType::*member_ptr) const {
     using WrapperType = typename detail::TracedObjectWrapperSelector<T>::Type;
-    return WrapperType(detail::GetTypedAttr<T>()(ref_, attr_key), path_->Attr(attr_key));
+    const ObjectType* node = static_cast<const ObjectType*>(ref_.get());
+    const T& attr = node->*member_ptr;
+    const char* attr_key = ICHECK_NOTNULL(GetAttrKeyByAddress(node, &attr));
+    return WrapperType(attr, path_->Attr(attr_key));
   }
 
   const RefT& Get() const { return ref_; }
