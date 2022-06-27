@@ -86,7 +86,7 @@ class ObjectPathNode : public Object {
   const ObjectPathNode* ParentNode() const;
 
   /*! Compares just the last node of the path, without comparing the whole path. */
-  virtual bool LastNodeEqual(const ObjectPathNode& other) const = 0;
+  virtual bool LastNodeEqual(const ObjectPathNode* other) const = 0;
 
   virtual std::string LastNodeString() const = 0;
 
@@ -130,7 +130,7 @@ class RootPathNode final : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(RootPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -152,7 +152,7 @@ class AttributeAccessPathNode final : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(AttributeAccessPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -171,7 +171,7 @@ class UnknownAttributeAccessPathNode final : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(UnknownAttributeAccessPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -194,7 +194,7 @@ class ArrayIndexPathNode : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(ArrayIndexPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -216,7 +216,7 @@ class MissingArrayElementPathNode : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(MissingArrayElementPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -238,7 +238,7 @@ class MapValuePathNode : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(MapValuePathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
@@ -257,7 +257,7 @@ class MissingMapEntryPathNode : public ObjectPathNode {
   TVM_DECLARE_FINAL_OBJECT_INFO(MissingMapEntryPathNode, ObjectPathNode);
 
  protected:
-  bool LastNodeEqual(const ObjectPathNode& other) const final;
+  bool LastNodeEqual(const ObjectPathNode* other) const final;
   std::string LastNodeString() const final;
 };
 
