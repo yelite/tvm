@@ -81,7 +81,7 @@ TEST(TracedObjectTest, MakeTraced_RootObject) {
 TEST(TracedObjectTest, GetAttr_ObjectRef) {
   ObjectWithAttrs root(make_object<ObjectWithAttrsNode>());
   auto root_traced = MakeTraced(root);
-  auto obj_attr = root_traced.GetAttr<DummyObject>("obj_attr");
+  auto obj_attr = root_traced.GetAttr(&ObjectWithAttrsNode::obj_attr);
   static_assert(std::is_same<decltype(obj_attr), TracedObject<DummyObject>>::value);
   ICHECK(obj_attr.GetPath().PathsEqual(ObjectPath::Root()->Attr("obj_attr")));
   ICHECK_EQ(obj_attr.Get().get(), root->obj_attr.get());
@@ -92,7 +92,7 @@ TEST(TracedObjectTest, GetAttr_Map) {
   root->map_attr.Set("foo", "bar");
 
   auto root_traced = MakeTraced(root);
-  auto map_attr = root_traced.GetAttr<Map<String, String>>("map_attr");
+  auto map_attr = root_traced.GetAttr(&ObjectWithAttrsNode::map_attr);
   static_assert(std::is_same<decltype(map_attr), TracedMap<String, String>>::value);
   ICHECK(map_attr.GetPath().PathsEqual(ObjectPath::Root()->Attr("map_attr")));
   ICHECK_EQ(map_attr.Get().get(), root->map_attr.get());
@@ -109,7 +109,7 @@ TEST(TracedObjectTest, GetAttr_Array) {
   root->array_attr.push_back("bar");
 
   auto root_traced = MakeTraced(root);
-  auto array_attr = root_traced.GetAttr<Array<String>>("array_attr");
+  auto array_attr = root_traced.GetAttr(&ObjectWithAttrsNode::array_attr);
   static_assert(std::is_same<decltype(array_attr), TracedArray<String>>::value);
   ICHECK(array_attr.GetPath().PathsEqual(ObjectPath::Root()->Attr("array_attr")));
   ICHECK_EQ(array_attr.Get().get(), root->array_attr.get());
@@ -123,7 +123,7 @@ TEST(TracedObjectTest, GetAttr_Int64) {
   ObjectWithAttrs root(make_object<ObjectWithAttrsNode>());
   auto root_traced = MakeTraced(root);
 
-  auto int64_attr = root_traced.GetAttr<int64_t>("int64_attr");
+  auto int64_attr = root_traced.GetAttr(&ObjectWithAttrsNode::int64_attr);
   static_assert(std::is_same<decltype(int64_attr), TracedBasicValue<int64_t>>::value);
   ICHECK_EQ(int64_attr.Get(), 5);
   ICHECK(int64_attr.GetPath().PathsEqual(ObjectPath::Root()->Attr("int64_attr")));

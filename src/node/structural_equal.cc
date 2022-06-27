@@ -45,42 +45,6 @@ bool ReflectionVTable::SEqualReduce(const Object* self, const Object* other,
 
 namespace {
 
-// Attribute visitor class for finding the attribute key by its address
-class GetAttrKeyByAddressVisitor : public AttrVisitor {
- public:
-  explicit GetAttrKeyByAddressVisitor(const void* attr_address)
-      : attr_address_(attr_address), key_(nullptr) {}
-
-  void Visit(const char* key, double* value) final { DoVisit(key, value); }
-  void Visit(const char* key, int64_t* value) final { DoVisit(key, value); }
-  void Visit(const char* key, uint64_t* value) final { DoVisit(key, value); }
-  void Visit(const char* key, int* value) final { DoVisit(key, value); }
-  void Visit(const char* key, bool* value) final { DoVisit(key, value); }
-  void Visit(const char* key, std::string* value) final { DoVisit(key, value); }
-  void Visit(const char* key, void** value) final { DoVisit(key, value); }
-  void Visit(const char* key, DataType* value) final { DoVisit(key, value); }
-  void Visit(const char* key, runtime::NDArray* value) final { DoVisit(key, value); }
-  void Visit(const char* key, runtime::ObjectRef* value) final { DoVisit(key, value); }
-
-  const char* GetKey() const { return key_; }
-
- private:
-  const void* attr_address_;
-  const char* key_;
-
-  void DoVisit(const char* key, const void* candidate) {
-    if (attr_address_ == candidate) {
-      key_ = key;
-    }
-  }
-};
-
-const char* GetAttrKeyByAddress(const Object* object, const void* attr_address) {
-  GetAttrKeyByAddressVisitor visitor(attr_address);
-  ReflectionVTable::Global()->VisitAttrs(const_cast<Object*>(object), &visitor);
-  return visitor.GetKey();
-}
-
 // Represents the first found mismatch, if any.
 struct FirstMismatch {
   ObjectPathPair paths;
