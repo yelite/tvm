@@ -89,38 +89,7 @@ class TIRLoopFrame : public TIRFrame {
 
 Map<tir::Var, tir::For> GetLoopVarMap(IRDocsifier p);
 
-struct BufferPrintInfo {
-  tir::Buffer buffer;
-  Array<PrimExpr> shape;
-  Optional<ExprDoc> dtype;
-  Optional<tir::Var> data;
-  Optional<Array<PrimExpr>> strides;
-  Optional<PrimExpr> elem_offset;
-  Optional<ExprDoc> scope;
-  Optional<ExprDoc> align;
-  Optional<ExprDoc> offset_factor;
-  Optional<ExprDoc> buffer_type;
-
-  ExprDoc AsCall(const ExprDoc& prefix, std::function<ExprDoc(const PrimExpr&)> converter) const;
-  ExprDoc AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
-                 std::function<ExprDoc(const PrimExpr&)> converter) const;
-};
-
-std::vector<BufferPrintInfo> GetBufferPrintInfo(
-    const std::vector<tir::Buffer>& buffers,  //
-    std::function<bool(const tir::VarNode*)> f_var_defined,
-    std::unordered_set<const tir::VarNode*>* var_explicit_def,
-    std::unordered_map<const tir::VarNode*, const tir::BufferNode*>* var_associated_def);
-
-ExprDoc PrintOpCall(tir::Call call, IRDocsifier p);
-
-Doc VarDef(tir::Var v, IRDocsifier p);                               // a = T.var("int32")
-Doc VarDecl(tir::Var, IRDocsifier p);                                // a: T.int32
-Doc IterVarBlockVarDef(tir::IterVar, IRDocsifier p);                 // a = T.axis.S/R(...)
-Doc IterVarLaunchThreadDef(tir::IterVar, IRDocsifier p);             // a = T.launch_thread(...)
-Doc BufferMatchBuffer(tir::Buffer, BufferPrintInfo, IRDocsifier p);  // a = T.match_buffer(...)
-Doc BufferDef(tir::Buffer, BufferPrintInfo, IRDocsifier p);          // a = T.buffer_decl(...)
-Doc BufferDecl(tir::Buffer, BufferPrintInfo, IRDocsifier p);         // a: T.Buffer()
+ExprDoc PrintOpCall(TracedObject<tir::Call> call, IRDocsifier p);
 
 }  // namespace printer
 }  // namespace script

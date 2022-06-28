@@ -27,7 +27,16 @@ namespace script {
 namespace printer {
 
 template <typename DocType, typename NodeType>
-Array<DocType> AsDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_docsifier) {
+Array<DocType> AsDocArray(const TracedArray<NodeType>& refs, const IRDocsifier& ir_docsifier) {
+  Array<DocType> result;
+  for (auto ref : refs) {
+    result.push_back(ir_docsifier->AsExprDoc(ref));
+  }
+  return result;
+}
+
+template <typename DocType, typename NodeType>
+Array<DocType> AsDocArray(std::initializer_list<NodeType>&& refs, const IRDocsifier& ir_docsifier) {
   Array<DocType> result;
   for (auto& ref : refs) {
     result.push_back(ir_docsifier->AsExprDoc(ref));
@@ -36,21 +45,43 @@ Array<DocType> AsDocArray(const Array<NodeType>& refs, const IRDocsifier& ir_doc
 }
 
 template <typename RefType>
-Array<ExprDoc> AsExprDocArray(const Array<RefType>& refs, const IRDocsifier& ir_docsifier) {
+Array<ExprDoc> AsExprDocArray(const TracedArray<RefType>& refs, const IRDocsifier& ir_docsifier) {
   return AsDocArray<ExprDoc>(refs, ir_docsifier);
 }
 
-inline DictDoc AsDictDoc(const Map<String, ObjectRef>& dict, const IRDocsifier& ir_docsifier)
-{
-    Array<ExprDoc> keys;
-    Array<ExprDoc> values;
+template <typename RefType>
+Array<ExprDoc> AsExprDocArray(std::initializer_list<RefType>&& refs,
+                              const IRDocsifier& ir_docsifier) {
+  return AsDocArray<ExprDoc>(std::move(refs), ir_docsifier);
+}
 
-    for (const auto& p : dict) {
-        keys.push_back(LiteralDoc::Str(p.first));
-        values.push_back(ir_docsifier->AsExprDoc(p.second));
-    }
+inline DictDoc AsDictDoc(const TracedMap<String, ObjectRef>& dict,
+                         const IRDocsifier& ir_docsifier) {
+  Array<ExprDoc> keys;
+  Array<ExprDoc> values;
 
-    return DictDoc(keys, values);
+  for (auto p : dict) {
+    keys.push_back(LiteralDoc::Str(p.first));
+    values.push_back(ir_docsifier->AsExprDoc(p.second));
+  }
+
+  auto doc = DictDoc(keys, values);
+  doc->paths.push_back(dict.GetPath());
+  return doc;
+}
+
+template <typename T>
+inline ListDoc AsListDoc(const TracedArray<T>& arr, const IRDocsifier& ir_docsifier) {
+  auto ret = ListDoc(AsExprDocArray(arr, ir_docsifier));
+  ret->paths.push_back(arr.GetPath());
+  return ret;
+}
+
+template <typename T>
+inline TupleDoc AsTupleDoc(const TracedArray<T>& arr, const IRDocsifier& ir_docsifier) {
+  auto ret = TupleDoc(AsExprDocArray(arr, ir_docsifier));
+  ret->paths.push_back(arr.GetPath());
+  return ret;
 }
 
 }  // namespace printer

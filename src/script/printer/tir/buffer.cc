@@ -16,6 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include "./buffer.h"
+
 #include <tvm/runtime/device_api.h>
 #include <tvm/tir/stmt_functor.h>
 
@@ -27,20 +29,21 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix,
-                                std::function<ExprDoc(const PrimExpr&)> converter) const {
+ExprDoc BufferPrintInfo::AsCall(
+    const ExprDoc& prefix, std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const {
   return AsCall(prefix, {}, converter);
 }
 
-ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
-                                std::function<ExprDoc(const PrimExpr&)> converter) const {
+ExprDoc BufferPrintInfo::AsCall(
+    const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
+    std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const {
   Array<ExprDoc> args(extra_args);
   Array<String> kwargs_keys;
   Array<ExprDoc> kwargs_values;
   {
     Array<ExprDoc> results;
     results.reserve(shape.size());
-    for (PrimExpr e : shape) {
+    for (TracedObject<PrimExpr> e : shape) {
       results.push_back(converter(e));
     }
     kwargs_keys.push_back("shape");
@@ -56,7 +59,7 @@ ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix, const Array<ExprDoc>& ext
   if (strides.defined()) {
     Array<ExprDoc> results;
     results.reserve(strides.value().size());
-    for (PrimExpr stride : strides.value()) {
+    for (TracedObject<PrimExpr> stride : strides.value()) {
       results.push_back(converter(stride));
     }
     kwargs_keys.push_back("strides");
@@ -85,107 +88,141 @@ ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix, const Array<ExprDoc>& ext
   return prefix->Call(args, kwargs_keys, kwargs_values);
 }
 
+static Optional<ExprDoc> GetBufferScope(const TracedObject<tir::Buffer>& buffer) {
+  auto data = buffer.GetAttr(&tir::BufferNode::data);
+  auto type = data.GetAttr(&tir::VarNode::type_annotation).Downcast<PointerType>();
+  auto scope = type.GetAttr(&PointerTypeNode::storage_scope);
+  if (scope.Get().empty() || scope.Get() == "global") {
+    return NullOpt;
+  } else {
+    return LiteralDoc::Str(scope);
+  }
+}
+
+static Optional<ExprDoc> GetBufferDtype(const TracedObject<tir::Buffer>& buffer) {
+  auto dtype = buffer.GetAttr(&tir::BufferNode::dtype);
+  if (dtype.Get() == DataType::Float(32)) {
+    return NullOpt;
+  } else {
+    return DType2Literal(dtype);
+  }
+}
+
+static TracedOptional<tir::Var> GetBufferData(const TracedObject<tir::Buffer>& buffer,
+                                              const AssociatedVariables& associated_vars) {
+  auto data = buffer.GetAttr(&tir::BufferNode::data);
+  if (associated_vars.IsAssociatedWith(data.Get(), buffer.Get())) {
+    return TracedOptional<tir::Var>(NullOpt, data.GetPath());
+  } else {
+    return data;
+  }
+}
+
+static TracedOptional<Array<PrimExpr>> GetBufferStrides(const TracedObject<tir::Buffer>& buffer) {
+  auto strides = buffer.GetAttr(&tir::BufferNode::strides);
+  if (!strides.empty()) {
+    return TracedOptional<Array<PrimExpr>>(strides);
+  } else {
+    return TracedOptional<Array<PrimExpr>>(NullOpt, strides.GetPath());
+  }
+}
+
+static TracedOptional<PrimExpr> GetBufferElemOffset(const TracedObject<tir::Buffer>& buffer,
+                                                    const AssociatedVariables& associated_vars) {
+  auto elem_offset = buffer.GetAttr(&tir::BufferNode::elem_offset);
+  if (elem_offset.defined()) {
+    // Don't print the offset if it is an associated variable
+    if (elem_offset.IsInstance<tir::Var>() &&
+        associated_vars.IsAssociatedWith(elem_offset.Get(), buffer.Get())) {
+      return TracedOptional<PrimExpr>(NullOpt, elem_offset.GetPath());
+    }
+
+    // Don't print the offset if it is zero
+    if (auto i = elem_offset.TryDowncast<IntImm>()) {
+      if (i.value().Get()->value == 0 && i.value().Get()->dtype == DataType::Int(32)) {
+        return TracedOptional<PrimExpr>(NullOpt, elem_offset.GetPath());
+      }
+    }
+  }
+  return elem_offset;
+}
+
+static Optional<ExprDoc> GetBufferAlignment(const TracedObject<tir::Buffer>& buffer) {
+  auto data_alignment = buffer.GetAttr(&tir::BufferNode::data_alignment);
+  if (data_alignment.Get() != runtime::kAllocAlignment) {
+    return LiteralDoc::Int(data_alignment);
+  } else {
+    return NullOpt;
+  }
+}
+
+static Optional<ExprDoc> GetBufferOffsetFactor(const TracedObject<tir::Buffer>& buffer) {
+  auto offset_factor = buffer.GetAttr(&tir::BufferNode::offset_factor);
+  if (offset_factor.Get() != 1) {
+    return LiteralDoc::Int(offset_factor);
+  } else {
+    return NullOpt;
+  }
+}
+
+static Optional<ExprDoc> GetBufferType(const TracedObject<tir::Buffer>& buffer) {
+  auto buffer_type = buffer.GetAttr(&tir::BufferNode::buffer_type);
+  if (buffer_type.Get() != tir::BufferType::kDefault) {
+    return LiteralDoc::Str(MakeTraced(String("auto"), buffer_type.GetPath()));
+  } else {
+    return NullOpt;
+  }
+}
+
 std::vector<BufferPrintInfo> GetBufferPrintInfo(
-    const std::vector<tir::Buffer>& buffers,  //
+    const std::vector<TracedObject<tir::Buffer>>& buffers,  //
     std::function<bool(const tir::VarNode*)> f_var_defined,
-    std::unordered_set<const tir::VarNode*>* var_explicit_def,
-    std::unordered_map<const tir::VarNode*, const tir::BufferNode*>* var_associated_def) {
+    std::unordered_map<const tir::VarNode*, ObjectPath>* var_explicit_def,
+    AssociatedVariables& associated_vars) {
   using namespace tvm::tir;
   auto check_associated_def = [&](const PrimExpr& e, const Buffer& buffer) -> void {
     if (const auto* v = e.as<VarNode>()) {
-      if (!f_var_defined(v) && !var_associated_def->count(v)) {
-        var_associated_def->insert({v, buffer.get()});
+      if (!f_var_defined(v)) {
+        associated_vars.AssociateIfNotAlready(v, buffer);
       }
     }
   };
-  auto check_explicit_def = [&](const PrimExpr& e) -> void {
-    PostOrderVisit(e, [&](const ObjectRef& n) -> void {
-      if (const auto* v = n.as<VarNode>()) {
-        if (!f_var_defined(v) && !var_associated_def->count(v)) {
-          var_explicit_def->insert(v);
+  auto check_explicit_def = [&](const TracedObject<PrimExpr>& e) -> void {
+    PostOrderVisitExprTraced(e, [&](const TracedObject<PrimExpr>& n) -> void {
+      if (const auto* v = n.Get().as<VarNode>()) {
+        if (!f_var_defined(v) && !associated_vars.IsAssociated(v)) {
+          var_explicit_def->insert({v, n.GetPath()});
         }
       }
     });
   };
-  auto is_associated_with = [&](const PrimExpr& e, const Buffer& buffer) -> bool {
-    if (const auto* v = e.as<VarNode>()) {
-      if (var_associated_def->count(v)) {
-        return var_associated_def->at(v) == buffer.get();
-      }
-    }
-    return false;
-  };
-  for (const Buffer& buffer : buffers) {
-    check_associated_def(buffer->data, buffer);
-    check_associated_def(buffer->elem_offset, buffer);
+  for (const TracedObject<Buffer>& buffer : buffers) {
+    check_associated_def(buffer.Get()->data, buffer.Get());
+    check_associated_def(buffer.Get()->elem_offset, buffer.Get());
   }
-  for (const Buffer& buffer : buffers) {
-    std::for_each(buffer->shape.begin(), buffer->shape.end(), check_explicit_def);
-    std::for_each(buffer->strides.begin(), buffer->strides.end(), check_explicit_def);
-    check_explicit_def(buffer->data);
-    check_explicit_def(buffer->elem_offset);
+  for (TracedObject<Buffer> buffer : buffers) {
+    auto shape = buffer.GetAttr(&tir::BufferNode::shape);
+    std::for_each(shape.begin(), shape.end(), check_explicit_def);
+
+    auto strides = buffer.GetAttr(&tir::BufferNode::strides);
+    std::for_each(strides.begin(), strides.end(), check_explicit_def);
+
+    check_explicit_def(buffer.GetAttr(&tir::BufferNode::data));
+    check_explicit_def(buffer.GetAttr(&tir::BufferNode::elem_offset));
   }
   std::vector<BufferPrintInfo> results;
-  for (const Buffer& buffer : buffers) {
-    BufferPrintInfo info;
-    String scope = buffer.scope();
-    info.buffer = buffer;
-    info.shape = buffer->shape;
-    if (buffer->dtype == DataType::Float(32)) {
-      info.dtype = NullOpt;
-    } else {
-      info.dtype = DType2Literal(buffer->dtype);
-    }
-    if (is_associated_with(buffer->data, buffer)) {
-      info.data = NullOpt;
-    } else {
-      info.data = buffer->data;
-    }
-    if (buffer->strides.defined() && !buffer->strides.empty()) {
-      info.strides = buffer->strides;
-    } else {
-      info.strides = NullOpt;
-    }
-    if (buffer->elem_offset.defined()) {
-      if (const auto* v = buffer->elem_offset.as<VarNode>()) {
-        if (is_associated_with(buffer->elem_offset, buffer)) {
-          info.elem_offset = NullOpt;
-        } else {
-          info.elem_offset = GetRef<Var>(v);
-        }
-      } else if (const auto* i = buffer->elem_offset.as<IntImmNode>()) {
-        if (i->value == 0 && i->dtype == DataType::Int(32)) {
-          info.elem_offset = NullOpt;
-        } else {
-          info.elem_offset = GetRef<IntImm>(i);
-        }
-      } else {
-        info.elem_offset = buffer->elem_offset;
-      }
-    } else {
-      info.elem_offset = NullOpt;
-    }
-    if (scope != "global") {
-      info.scope = LiteralDoc::Str(scope);
-    } else {
-      info.scope = NullOpt;
-    }
-    if (buffer->data_alignment != runtime::kAllocAlignment) {
-      info.align = LiteralDoc::Int(Integer(buffer->data_alignment));
-    } else {
-      info.align = NullOpt;
-    }
-    if (buffer->offset_factor != 1) {
-      info.offset_factor = LiteralDoc::Int(Integer(buffer->offset_factor));
-    } else {
-      info.offset_factor = NullOpt;
-    }
-    if (buffer->buffer_type != BufferType::kDefault) {
-      info.buffer_type = LiteralDoc::Str("auto");
-    } else {
-      info.buffer_type = NullOpt;
-    }
-    results.push_back(info);
+  for (TracedObject<Buffer> buffer : buffers) {
+    results.push_back(
+        BufferPrintInfo{/* .buffer = */ buffer,
+                        /* .shape = */ buffer.GetAttr(&tir::BufferNode::shape),
+                        /* .dtype = */ GetBufferDtype(buffer),
+                        /* .data = */ GetBufferData(buffer, associated_vars),
+                        /* .strides = */ GetBufferStrides(buffer),
+                        /* .elem_offset = */ GetBufferElemOffset(buffer, associated_vars),
+                        /* .scope = */ GetBufferScope(buffer),
+                        /* .align = */ GetBufferAlignment(buffer),
+                        /* .offset_factor = */ GetBufferOffsetFactor(buffer),
+                        /* .buffer_type = */ GetBufferType(buffer)});
   }
   return results;
 }

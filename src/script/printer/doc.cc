@@ -46,25 +46,15 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-LiteralDoc::LiteralDoc(ObjectRef value) {
+LiteralDoc::LiteralDoc(ObjectRef value, ObjectPath path) {
   ObjectPtr<LiteralDocNode> n = make_object<LiteralDocNode>();
   n->value = value;
+  if (path.defined()) {
+    n->paths.push_back(path);
+  }
   this->data_ = n;
 }
 TVM_REGISTER_NODE_TYPE(LiteralDocNode);
-TVM_REGISTER_GLOBAL("script.LiteralDocInt").set_body_typed([](IntImm v) {
-  return LiteralDoc::Int(v);
-});
-TVM_REGISTER_GLOBAL("script.LiteralDocFloat").set_body_typed([](FloatImm v) {
-  return LiteralDoc::Float(v);
-});
-TVM_REGISTER_GLOBAL("script.LiteralDocBool").set_body_typed([](Bool v) {
-  return LiteralDoc::Bool(v);
-});
-TVM_REGISTER_GLOBAL("script.LiteralDocStr").set_body_typed([](String v) {
-  return LiteralDoc::Str(v);
-});
-TVM_REGISTER_GLOBAL("script.LiteralDocNone").set_body_typed([]() { return LiteralDoc::None(); });
 
 IdDoc::IdDoc(String name) {
   ObjectPtr<IdDocNode> n = make_object<IdDocNode>();
@@ -219,10 +209,9 @@ WhileDoc::WhileDoc(ExprDoc predicate, Array<StmtDoc> body) {
   this->data_ = n;
 }
 TVM_REGISTER_NODE_TYPE(WhileDocNode);
-TVM_REGISTER_GLOBAL("script.WhileDoc")
-    .set_body_typed([](ExprDoc predicate, Array<StmtDoc> body) {
-      return WhileDoc(predicate, body);
-    });
+TVM_REGISTER_GLOBAL("script.WhileDoc").set_body_typed([](ExprDoc predicate, Array<StmtDoc> body) {
+  return WhileDoc(predicate, body);
+});
 
 ForDoc::ForDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body) {
   ObjectPtr<ForDocNode> n = make_object<ForDocNode>();

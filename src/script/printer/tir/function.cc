@@ -19,7 +19,7 @@
 #include <tvm/tir/function.h>
 #include <tvm/tir/op.h>
 
-#include "./utils.h"
+#include "./buffer.h"
 
 namespace tvm {
 namespace script {
@@ -42,30 +42,42 @@ class PrimFuncFrame : public TIRFrame {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(PrimFuncFrame, TIRFrame, PrimFuncFrameNode);
 };
 
-Doc PrintPrimFunc(tir::PrimFunc func, IRDocsifier p) {
+static TracedObject<tir::Stmt> GetFunctionBody(const TracedObject<tir::PrimFunc>& func) {
+  auto func_body = func.GetAttr(&tir::PrimFuncNode::body);
+  if (auto block_realize = func_body.TryDowncast<tir::BlockRealize>()) {
+    if (block_realize.value().Get()->iter_values.empty() &&
+        block_realize.value().Get()->block->annotations.empty()) {
+      return block_realize.value().GetAttr(&tir::BlockRealizeNode::block);
+    }
+  }
+  return func_body;
+}
+
+Doc PrintPrimFunc(TracedObject<tir::PrimFunc> func, IRDocsifier p) {
   using namespace tvm::tir;
+
   PrimFuncFrame frame(p->sym);
   WithCtx with_dispatch = p->WithDispatchToken("tir");
   WithCtx with_frame = p->WithFrame(frame);
 
-  std::unordered_set<const VarNode*> var_explicit_def;
-  std::unordered_map<const VarNode*, const tir::BufferNode*> var_associated_def;
+  std::unordered_map<const VarNode*, ObjectPath> var_explicit_def;
+  AssociatedVariables associated_vars;
   std::unordered_map<const VarNode*, BufferPrintInfo> var2info;
   std::vector<BufferPrintInfo> match_buffer_info;
   {
     std::vector<Var> buffer_vars;
-    std::vector<Buffer> buffers;
-    for (const auto& kv : func->buffer_map) {
+    std::vector<TracedObject<Buffer>> buffers;
+    for (auto kv : func.GetAttr(&tir::PrimFuncNode::buffer_map)) {
       Var buffer_var = kv.first;
-      Buffer buffer = kv.second;
+      TracedObject<Buffer> buffer = kv.second;
       buffers.push_back(buffer);
       buffer_vars.push_back(buffer_var);
     }
     auto f_var_defined = [&p](const VarNode* var) -> bool {
-      return p->sym->GetObjectDoc(GetRef<Var>(var)).defined();
+      return p->sym->IsObjectDefined(GetRef<Var>(var));
     };
     std::vector<BufferPrintInfo> buffer_infos =
-        GetBufferPrintInfo(buffers, f_var_defined, &var_explicit_def, &var_associated_def);
+        GetBufferPrintInfo(buffers, f_var_defined, &var_explicit_def, associated_vars);
     int n = buffers.size();
     for (int i = 0; i < n; ++i) {
       const BufferPrintInfo& info = buffer_infos[i];
@@ -74,99 +86,71 @@ Doc PrintPrimFunc(tir::PrimFunc func, IRDocsifier p) {
           info.buffer_type.defined()) {
         match_buffer_info.push_back(info);
       } else {
-        var2info[buffer_vars[i].get()] = info;
+        var2info.insert({buffer_vars[i].get(), info});
       }
     }
   }
+  auto params = func.GetAttr(&tir::PrimFuncNode::params);
   Array<AssignDoc> args;
-  args.reserve(func->params.size());
-  for (const Var& v : func->params) {
-    auto it = var2info.find(v.get());
+  args.reserve(params.size());
+  for (TracedObject<Var> v : params) {
+    auto it = var2info.find(v.Get().get());
     if (it == var2info.end()) {
-      IdDoc lhs = frame->DefByName(v, p->sym->GetUniqueName(v->name_hint));
-      ExprDoc type = p->AsDoc<ExprDoc>(GetType(v));
-      args.push_back(AssignDoc(lhs, NullOpt, type));
-      if (var_explicit_def.count(v.get())) {
-        var_explicit_def.erase(v.get());
-      }
-      if (var_associated_def.count(v.get())) {
-        var_associated_def.erase(v.get());
-      }
+      IdDoc lhs = DefineVariable(v, frame);
+      ExprDoc type_annotation = GetTypeAnnotationDocForVar(v, p);
+      args.push_back(AssignDoc(lhs, NullOpt, type_annotation));
+      associated_vars.Disassociate(v.Get().get());
+      var_explicit_def.erase(v.Get().get());
     } else {
       const BufferPrintInfo& info = it->second;
-      Buffer buffer = func->buffer_map.at(v);
-      IdDoc lhs = frame->DefByName(buffer, p->sym->GetUniqueName(buffer->name));
-      ExprDoc type = info.AsCall(TIR(p)->Attr("Buffer"), [&p](const PrimExpr& e) -> ExprDoc {
-        // TODO: handle undefined vars, e.g. T.Buffer(('a', 'b'), "float32")
-        return p->AsDoc<ExprDoc>(e);
-      });
+      IdDoc lhs = DefineBuffer(info.buffer, frame);
+      ExprDoc type =
+          info.AsCall(TIR(p)->Attr("Buffer"), [&p](const TracedObject<PrimExpr>& e) -> ExprDoc {
+            // TODO: handle undefined vars, e.g. T.Buffer(('a', 'b'), "float32")
+            return p->AsDoc<ExprDoc>(e);
+          });
       args.push_back(AssignDoc(lhs, NullOpt, type));
-      frame->DefByDoc(v, lhs->Attr("data"));
-      ICHECK(!var_explicit_def.count(v.get()));
-      if (var_associated_def.count(v.get())) {
-        var_associated_def.erase(v.get());
-      }
+      DefineBufferDataVariable(info.buffer.Get(), frame);
+      associated_vars.Disassociate(info.buffer.Get()->data.get());
+      ICHECK(!var_explicit_def.count(v.Get().get()));
     }
   }
   Array<StmtDoc> body;
-  for (const VarNode* var : var_explicit_def) {
-    frame->DefByName(GetRef<Var>(var), p->sym->GetUniqueName(var->name_hint));
+  for (const auto& var_and_path : var_explicit_def) {
+    auto var_ref = GetRef<Var>(var_and_path.first);
+    auto var = MakeTraced(var_ref, var_and_path.second);
+    IdDoc id = DefineVariable(var, frame);
+    auto dtype = var.GetAttr(&VarNode::dtype);
+    ExprDoc rhs = TIR(p)->Attr("var")->Call({DType2Literal(dtype)});
+    body.push_back(AssignDoc(id, rhs, NullOpt));
   }
+
+  std::vector<IdDoc> match_buffer_ids;
+  match_buffer_ids.reserve(match_buffer_info.size());
   for (const BufferPrintInfo& info : match_buffer_info) {
-    const Buffer& buffer = info.buffer;
-    frame->DefByName(buffer, p->sym->GetUniqueName(buffer->name));
+    match_buffer_ids.push_back(DefineBuffer(info.buffer, frame));
   }
-  for (const auto& kv : var_associated_def) {
-    const VarNode* var = kv.first;
-    const BufferNode* buffer = kv.second;
-    if (Optional<ExprDoc> lhs = p->sym->GetObjectDoc(GetRef<Buffer>(buffer))) {
-      if (buffer->data.get() == var) {
-        frame->DefByDoc(GetRef<Var>(var), lhs.value()->Attr("data"));
-      } else if (buffer->elem_offset.get() == var) {
-        frame->DefByDoc(GetRef<Var>(var), lhs.value()->Attr("elem_offset"));
-      } else {
-        ICHECK(false) << "Unexpected association. Buffer: " << GetRef<Buffer>(buffer)
-                      << "; Var: " << GetRef<Var>(var);
-      }
-    } else {
-      LOG(FATAL) << "Undefined buffer: " << buffer->name;
-    }
-  }
-  for (const VarNode* var : var_explicit_def) {
-    if (Optional<ExprDoc> lhs = p->sym->GetObjectDoc(GetRef<Var>(var))) {
-      ExprDoc rhs = TIR(p)->Attr("var")->Call({DType2Literal(var->dtype)});
-      body.push_back(AssignDoc(lhs.value(), rhs, NullOpt));
-    } else {
-      LOG(FATAL) << "Undefined variable: " << var->name_hint;
-    }
-  }
-  for (const BufferPrintInfo& info : match_buffer_info) {
-    const Buffer& buffer = info.buffer;
-    if (Optional<ExprDoc> lhs = p->sym->GetObjectDoc(buffer)) {
-      ExprDoc rhs = info.AsCall(TIR(p)->Attr("match_buffer"), [&p](const PrimExpr& e) -> ExprDoc {
-        return p->AsDoc<ExprDoc>(e);
-      });
-      body.push_back(AssignDoc(lhs.value(), rhs, NullOpt));
-    } else {
-      LOG(FATAL) << "Undefined buffer: " << buffer->name;
-    }
+  associated_vars.DefineVariables(frame);
+
+  for (size_t i = 0; i < match_buffer_info.size(); ++i) {
+    ExprDoc rhs = match_buffer_info[i].AsCall(
+        TIR(p)->Attr("match_buffer"),
+        [&p](const TracedObject<PrimExpr>& e) -> ExprDoc { return p->AsDoc<ExprDoc>(e); });
+    body.push_back(AssignDoc(match_buffer_ids.at(i), rhs, NullOpt));
   }
   // TODO: support T.func_attrs
   // TODO: support name
   // TODO: support preflatten buffers
 
-  if (func->body->IsInstance<tir::BlockRealizeNode>() &&
-      func->body.as<BlockRealizeNode>()->iter_values.empty() &&
-      func->body.as<BlockRealizeNode>()->block->annotations.empty()) {
-    body = runtime::Concat(body, AsStmtDocArray(func->body.as<BlockRealizeNode>()->block, p));
-  } else {
-    body = runtime::Concat(body, AsStmtDocArray(func->body, p));
-  }
+  auto func_body = GetFunctionBody(func);
+  body = runtime::Concat(body, AsStmtDocArray(func_body, p));
+
+  auto ret_type = func.GetAttr(&PrimFuncNode::ret_type);
 
   return FunctionDoc(/*name=*/IdDoc("main"),  //
                      /*args=*/args,
                      /*decorators=*/{TIR(p)->Attr("prim_func")},
-                     /*return_type=*/p->AsDoc<ExprDoc>(func->ret_type),
+                     /*return_type=*/p->AsDoc<ExprDoc>(ret_type),
                      /*body=*/body);
 }
 

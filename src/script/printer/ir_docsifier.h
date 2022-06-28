@@ -26,8 +26,12 @@
 #include "./frame.h"
 #include "./functor.h"
 #include "./symbol_table.h"
+#include "./traced_object.h"
 
 namespace tvm {
+
+class ObjectPath;
+
 namespace script {
 namespace printer {
 
@@ -54,14 +58,16 @@ class IRDocsifierNode : public Object {
   /*!
    * \brief Transform the input object into TDoc
    */
+
   template <class TDoc>
-  TDoc AsDoc(const ObjectRef& obj) const {
+  TDoc AsDoc(const TracedObject<ObjectRef>& obj) const {
     auto result = Downcast<TDoc>(AsDocImpl(obj));
-    result->source = obj;
+    result->source = obj.Get();
+    result->paths.push_back(obj.GetPath());
     return result;
   }
 
-  ExprDoc AsExprDoc(const ObjectRef& ref) { return AsDoc<ExprDoc>(ref); }
+  ExprDoc AsExprDoc(const TracedObject<ObjectRef>& ref) { return AsDoc<ExprDoc>(ref); }
 
   /*!
    * \brief Push a new dispatch token into the stack
@@ -104,7 +110,7 @@ class IRDocsifierNode : public Object {
   Array<FrameType> GetFrames() const;
 
  private:
-  Doc AsDocImpl(const ObjectRef& obj) const;
+  Doc AsDocImpl(const TracedObject<ObjectRef>& obj) const;
 };
 
 class IRDocsifier : public ObjectRef {
@@ -114,7 +120,7 @@ class IRDocsifier : public ObjectRef {
  public:
   IRDocsifier(Map<String, String> ir_prefix);
 
-  using FType = ObjectFunctor<printer::Doc(const ObjectRef&, IRDocsifier)>;
+  using FType = TracedObjectFunctor<printer::Doc, IRDocsifier>;
   TVM_DLL static FType& vtable();
 };
 
@@ -139,8 +145,9 @@ Array<FrameType> IRDocsifierNode::GetFrames() const {
   return result;
 }
 
-inline Doc IRDocsifierNode::AsDocImpl(const ObjectRef& obj) const {
-  return IRDocsifier::vtable()(dispatch_tokens.back(), obj, GetRef<IRDocsifier>(this));
+inline Doc IRDocsifierNode::AsDocImpl(const TracedObject<ObjectRef>& obj) const {
+  return IRDocsifier::vtable()(dispatch_tokens.back(), obj.Get(), obj.GetPath(),
+                               GetRef<IRDocsifier>(this));
 }
 
 }  // namespace printer
