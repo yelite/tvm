@@ -19,8 +19,9 @@
 
 #include "utils.h"
 
-#include <tvm/node/visit_traced.h>
 #include <tvm/tir/op.h>
+
+#include "../visit_traced.h"
 
 namespace tvm {
 namespace script {

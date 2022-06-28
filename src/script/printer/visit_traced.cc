@@ -17,7 +17,7 @@
  * under the License.
  */
 
-#include <tvm/node/visit_traced.h>
+#include "./visit_traced.h"
 
 namespace tvm {
 

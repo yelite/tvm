@@ -20,13 +20,13 @@
 #define TVM_SCRIPT_PRINTER_IR_DOCSIFIER_H_
 
 #include <tvm/node/node.h>
-#include <tvm/node/traced_object.h>
 #include <tvm/support/with.h>
 
 #include "./doc.h"
 #include "./frame.h"
 #include "./functor.h"
 #include "./symbol_table.h"
+#include "./traced_object.h"
 
 namespace tvm {
 

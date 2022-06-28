@@ -1,13 +1,13 @@
 #ifndef TVM_SCRIPT_PRINTER_TIR_BUFFER_H_
 #define TVM_SCRIPT_PRINTER_TIR_BUFFER_H_
 
-#include <tvm/node/traced_object.h>
 #include <tvm/tir/buffer.h>
 
 #include <unordered_map>
 #include <vector>
 
 #include "../ir_docsifier.h"
+#include "../traced_object.h"
 #include "utils.h"
 
 namespace tvm {

@@ -19,9 +19,9 @@
 #ifndef TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 #define TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 
-#include <tvm/node/traced_object.h>
 
 #include "../ir_docsifier.h"
+#include "../traced_object.h"
 #include "./tir.h"
 
 namespace tvm {

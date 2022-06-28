@@ -21,7 +21,8 @@
 
 #include <tvm/ir/expr.h>
 #include <tvm/node/node.h>
-#include <tvm/node/traced_object.h>
+
+#include "./traced_object.h"
 
 namespace tvm {
 namespace script {

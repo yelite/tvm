@@ -20,7 +20,7 @@
 #ifndef TVM_VISIT_TRACED_H_
 #define TVM_VISIT_TRACED_H_
 
-#include <tvm/node/traced_object.h>
+#include "traced_object.h"
 
 namespace tvm {
 

@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-#include "tvm/node/traced_object.h"
+#include "./traced_object.h"
 #include "tvm/runtime/logging.h"
 
 namespace tvm {
