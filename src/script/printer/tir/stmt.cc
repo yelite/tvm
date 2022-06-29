@@ -184,6 +184,9 @@ StmtBlockDoc PrintLetStmt(TracedObject<tir::LetStmt> stmt, IRDocsifier p) {
   auto type_annotation_doc = GetTypeAnnotationDocForVar(var, p);
 
   if (current_frame->allow_concise_scoping_) {
+    // dtype won't be linked to a doc object if it does concise scoping
+    // here we manually link it to type annotation
+    type_annotation_doc->paths.push_back(dtype.GetPath());
     AssignDoc var_def = AssignDoc(var_doc, value_doc, type_annotation_doc);
     return StmtBlockDoc(runtime::Concat({var_def}, body));
   } else {

@@ -267,9 +267,8 @@ def test_hightlight_stmt_assert(path, expected_text):
         ROOT.attr("var").attr("dtype"),
         """
             foo: T.int32 = 555
-            ^^^^^^^^^^^^^^^^^^
+                 ^^^^^^^
             foo + 77
-            ^^^^^^^^
         """,
         ROOT.attr("var").attr("type_annotation"),
         """
