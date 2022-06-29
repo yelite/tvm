@@ -166,6 +166,9 @@ class PythonDocPrinter : public DocPrinter {
     output_ << obj;
   }
 
+  void PrintBinaryOp(OperationDocNode::Kind operation_kind, const ExprDoc& a, const ExprDoc& b);
+  void PrintSpecialOp(OperationDocNode::Kind operation_kind, const Array<ExprDoc>& oprands);
+
   void PrintStringLiteral(const String& string);
   void PrintNumberNode(const PrimExpr& expr);
 };

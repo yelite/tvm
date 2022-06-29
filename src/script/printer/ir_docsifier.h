@@ -134,6 +134,7 @@ Optional<FrameType> IRDocsifierNode::GetFrame() const {
   return NullOpt;
 }
 
+// TODO: move this to private function for For stmt when upstreaming
 template <typename FrameType>
 Array<FrameType> IRDocsifierNode::GetFrames() const {
   Array<FrameType> result;

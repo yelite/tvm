@@ -27,6 +27,57 @@ namespace tvm {
 namespace script {
 namespace printer {
 
+namespace {
+std::vector<TracedObject<tir::Stmt>> FlattenSeqStmt(const TracedObject<tir::Stmt>& stmt) {
+  std::vector<TracedObject<tir::Stmt>> result;
+
+  if (stmt.IsInstance<tir::SeqStmt>()) {
+    auto seq = stmt.Downcast<tir::SeqStmt>().GetAttr(&tir::SeqStmtNode::seq);
+    for (const TracedObject<tir::Stmt>& child : seq) {
+      std::vector<TracedObject<tir::Stmt>> flattened_child = FlattenSeqStmt(child);
+      result.insert(result.end(), flattened_child.begin(), flattened_child.end());
+    }
+  } else {
+    result.push_back(stmt);
+  }
+
+  return result;
+}
+
+Array<StmtDoc> FlattenStmtDoc(const Doc& doc) {
+  if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
+    return stmt_block->stmts;
+  } else if (const auto* stmt_doc = doc.as<StmtDocNode>()) {
+    return {GetRef<StmtDoc>(stmt_doc)};
+  } else {
+    LOG(FATAL) << "Expect to get StmtBlockDoc or StmtDoc, got " << doc->GetTypeKey();
+    throw;
+  }
+}
+}  // namespace
+
+Array<StmtDoc> AsStmtDocArray(const TracedObject<tir::Stmt>& obj, IRDocsifier p) {
+  Array<StmtDoc> result;
+  std::vector<TracedObject<tir::Stmt>> flattened_stmts = FlattenSeqStmt(obj);
+
+  const auto* frame_node = p->frames.back().as<TIRFrameNode>();
+  ICHECK_NOTNULL(frame_node);
+
+  size_t length = flattened_stmts.size();
+
+  const bool old_concise_scoping_status = frame_node->allow_concise_scoping_;
+  frame_node->allow_concise_scoping_ = false;
+  for (size_t i = 0; i < length; i++) {
+    if (i == length - 1) {
+      frame_node->allow_concise_scoping_ = true;
+    }
+    result = runtime::Concat(result, FlattenStmtDoc(p->AsDoc<Doc>(flattened_stmts[i])));
+  }
+  frame_node->allow_concise_scoping_ = old_concise_scoping_status;
+
+  return result;
+}
+
 ExprDoc GetTypeAnnotationDocForVar(const TracedObject<tir::Var>& var, const IRDocsifier& p) {
   auto type_annotation = var.GetAttr(&tir::VarNode::type_annotation);
   if (type_annotation.Get().defined()) {

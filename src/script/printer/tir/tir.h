@@ -32,7 +32,7 @@ namespace printer {
 class TIRFrameNode : public FrameNode {
  public:
   Array<StmtDoc> stmts;
-  bool allow_concise_scoping_{false};
+  mutable bool allow_concise_scoping_{false};
 
   void VisitAttrs(AttrVisitor* v) {
     FrameNode::VisitAttrs(v);
@@ -74,7 +74,7 @@ class TIRLoopFrameNode : public TIRFrameNode {
   Array<tir::For> loops{};  // the first element is the outer-most loop
 
   static constexpr const char* _type_key = "script.TIRLoopFrame";
-  TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, FrameNode);
+  TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, TIRFrameNode);
 };
 
 class TIRLoopFrame : public TIRFrame {
