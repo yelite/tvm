@@ -19,10 +19,11 @@
 #ifndef TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 #define TVM_SCRIPT_PRINTER_TIR_UTIL_H_
 
-
 #include "../ir_docsifier.h"
 #include "../traced_object.h"
 #include "./tir.h"
+#include "tvm/runtime/logging.h"
+#include "tvm/tir/stmt.h"
 
 namespace tvm {
 namespace script {
@@ -33,18 +34,7 @@ inline bool AllowConciseScoping(const IRDocsifier& p) {
   return f != nullptr && f->allow_concise_scoping_;
 }
 
-inline Array<StmtDoc> AsStmtDocArray(const TracedObject<ObjectRef>& obj, IRDocsifier p) {
-  Doc doc = p->AsDoc<Doc>(obj);
-  if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
-    return stmt_block->stmts;
-  } else if (const auto* stmt_node = doc.as<StmtDocNode>()) {
-    return {GetRef<StmtDoc>(stmt_node)};
-  } else {
-    LOG(FATAL) << "Expect to get StmtBlockDoc or StmtDoc, got "
-               << Object::TypeIndex2Key(doc->type_index());
-    throw;
-  }
-}
+Array<StmtDoc> AsStmtDocArray(const TracedObject<tir::Stmt>& obj, IRDocsifier p);
 
 inline IdDoc TIR(const IRDocsifier& p) { return IdDoc(p->ir_prefix.Get("tir").value_or("T")); }
 

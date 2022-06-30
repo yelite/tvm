@@ -184,6 +184,9 @@ StmtBlockDoc PrintLetStmt(TracedObject<tir::LetStmt> stmt, IRDocsifier p) {
   auto type_annotation_doc = GetTypeAnnotationDocForVar(var, p);
 
   if (current_frame->allow_concise_scoping_) {
+    // dtype won't be linked to a doc object if it does concise scoping
+    // here we manually link it to type annotation
+    type_annotation_doc->paths.push_back(dtype.GetPath());
     AssignDoc var_def = AssignDoc(var_doc, value_doc, type_annotation_doc);
     return StmtBlockDoc(runtime::Concat({var_def}, body));
   } else {
@@ -290,6 +293,7 @@ StmtBlockDoc PrintAllocate(TracedObject<tir::Allocate> stmt, IRDocsifier p) {
   std::vector<BufferPrintInfo> aliasing_buffer_infos =
       GetBufferPrintInfo(usage.aliasing_buffers, f_var_defined, &var_explicit_def, associated_vars);
 
+  TIRFrame previous_frame = p->GetFrame<TIRFrame>().value();
   TIRGeneralFrame frame(p->sym);
   WithCtx with_frame = p->WithFrame(frame);
 
@@ -332,7 +336,7 @@ StmtBlockDoc PrintAllocate(TracedObject<tir::Allocate> stmt, IRDocsifier p) {
   body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr(&tir::AllocateNode::body), p));
 
   return AsConciseScopedStmts(alloc_buffer_id_doc, alloc_buffer_expr_doc, body,
-                              p->GetFrame<TIRFrame>().value());
+                              previous_frame);
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable).set_dispatch<tir::Allocate>(PrintAllocate);
@@ -374,6 +378,7 @@ StmtBlockDoc PrintAttrStmt(TracedObject<tir::AttrStmt> stmt, IRDocsifier p) {
     // IterVar
     auto iter_var = node.Downcast<tir::IterVar>();
     auto var = iter_var.GetAttr(&tir::IterVarNode::var);
+    TIRFrame previous_frame = p->GetFrame<TIRFrame>().value();
     TIRGeneralFrame new_frame(p->sym);
     WithCtx with_frame = p->WithFrame(new_frame);
 
@@ -382,7 +387,7 @@ StmtBlockDoc PrintAttrStmt(TracedObject<tir::AttrStmt> stmt, IRDocsifier p) {
     ExprDoc launch_thread_call = TIR(p)->Attr("launch_thread")->Call({var_doc, value_doc});
     Array<StmtDoc> body_docs = AsStmtDocArray(body, p);
 
-    return AsConciseScopedStmts(launch_thread_call, body_docs, p->GetFrame<TIRFrame>().value());
+    return AsConciseScopedStmts(launch_thread_call, body_docs, previous_frame);
   } else {
     // General Form
     ExprDoc attr_expr =

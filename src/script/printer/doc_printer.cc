@@ -363,29 +363,15 @@ void PythonDocPrinter::PrintTypedDoc(const IndexDoc& doc) {
 }
 
 void PythonDocPrinter::PrintTypedDoc(const OperationDoc& doc) {
-  PrintDoc(doc->operands[0]);
-  // TODO: unary and ternary op
   using OpKind = OperationDocNode::Kind;
-  switch (doc->kind) {
-    case OpKind::kUndefined:
-      ICHECK(false) << "Cannot print undefined operation doc";
-    case OpKind::kAdd:
-      output_ << " + ";
-      break;
-    case OpKind::kSub:
-      output_ << " - ";
-      break;
-    case OpKind::kMul:
-      output_ << " * ";
-      break;
-    case OpKind::kFloorDiv:
-      output_ << " // ";
-      break;
-    case OpKind::kFloorMod:
-      output_ << " % ";
-      break;
+  if (doc->kind < OpKind::kUnaryEnd) {
+    // TODO: unary op
+    throw;
+  } else if (doc->kind < OpKind::kBinaryEnd) {
+    PrintBinaryOp(doc->kind, doc->operands[0], doc->operands[1]);
+  } else {
+    PrintSpecialOp(doc->kind, doc->operands);
   }
-  PrintDoc(doc->operands[1]);
 }
 
 void PythonDocPrinter::PrintTypedDoc(const CallDoc& doc) {
@@ -570,6 +556,51 @@ void PythonDocPrinter::PrintStmtBlock(const Array<StmtDoc>& docs) {
   NewLine();
   PrintStmtArray(docs);
   DecreaseIndent();
+}
+
+void PythonDocPrinter::PrintBinaryOp(OperationDocNode::Kind operation_kind, const ExprDoc& a,
+                                     const ExprDoc& b) {
+  using OpKind = OperationDocNode::Kind;
+
+  PrintDoc(a);
+  switch (operation_kind) {
+    case OpKind::kAdd:
+      output_ << " + ";
+      break;
+    case OpKind::kSub:
+      output_ << " - ";
+      break;
+    case OpKind::kMul:
+      output_ << " * ";
+      break;
+    case OpKind::kFloorDiv:
+      output_ << " // ";
+      break;
+    case OpKind::kFloorMod:
+      output_ << " % ";
+      break;
+    default:
+      LOG(FATAL) << "Unknown Binary Operation " << static_cast<int>(operation_kind);
+  }
+  PrintDoc(b);
+}
+
+void PythonDocPrinter::PrintSpecialOp(OperationDocNode::Kind operation_kind,
+                                      const Array<ExprDoc>& operands) {
+  using OpKind = OperationDocNode::Kind;
+
+  switch (operation_kind) {
+    case OpKind::kAssert:
+      output_ << "assert ";
+      PrintDoc(operands[0]);
+      if (operands.size() > 1) {
+        output_ << ", ";
+        PrintDoc(operands[1]);
+      }
+      break;
+    default:
+      LOG(FATAL) << "Unknown Special Operation " << static_cast<int>(operation_kind);
+  }
 }
 
 void PythonDocPrinter::PrintStringLiteral(const String& string) {

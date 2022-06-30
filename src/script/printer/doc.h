@@ -281,13 +281,17 @@ class OperationDocNode : public ExprDocNode {
  public:
   enum class Kind : int32_t {
     kUndefined = 0,
-    kUnary = 1,
-    kBinary = 100,
+
+    kUnaryStart = 1,
+    kUnaryEnd = 99,
+
+    kBinaryStart = 100,
     kAdd = 101,
     kSub = 102,
     kMul = 103,
     kFloorDiv = 104,
     kFloorMod = 105,
+    kBinaryEnd = 999,
 
     kSpecial = 1000,
     kAssert = 1001,

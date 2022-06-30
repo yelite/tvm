@@ -1,9 +1,9 @@
 import pytest
 
-from tvm.script import tir as T
 import tvm
 from tvm import te
 from tvm.runtime import ObjectPath
+from tvm.script import tir as T
 
 _as_tvm_script = tvm.get_global_func("experiment.AsTVMScript")
 
@@ -236,21 +236,21 @@ def test_hightlight_stmt_seq_nested(path, expected_text):
     make_params(
         ROOT.attr("condition"),
         """
-            with T.Assert(False, "hello"):
-                          ^^^^^
-                555
+            assert False, "hello"
+                   ^^^^^
+            555
         """,
         ROOT.attr("message"),
         """
-            with T.Assert(False, "hello"):
-                                 ^^^^^^^
-                555
+            assert False, "hello"
+                          ^^^^^^^
+            555
         """,
         ROOT.attr("body"),
         """
-            with T.Assert(False, "hello"):
-                555
-                ^^^
+            assert False, "hello"
+            555
+            ^^^
         """,
     ),
 )
@@ -266,38 +266,33 @@ def test_hightlight_stmt_assert(path, expected_text):
     make_params(
         ROOT.attr("var").attr("dtype"),
         """
-            foo: T.int32 = T.var("int32")
-                                 ^^^^^^^
-            with T.let(foo, 555):
-                foo + 77
+            foo: T.int32 = 555
+                 ^^^^^^^
+            foo + 77
         """,
         ROOT.attr("var").attr("type_annotation"),
         """
-            foo: T.int32 = T.var("int32")
+            foo: T.int32 = 555
                  ^^^^^^^
-            with T.let(foo, 555):
-                foo + 77
+            foo + 77
         """,
         ROOT.attr("value"),
         """
-            foo: T.int32 = T.var("int32")
-            with T.let(foo, 555):
-                            ^^^
-                foo + 77
+            foo: T.int32 = 555
+                           ^^^
+            foo + 77
         """,
         ROOT.attr("body"),
         """
-            foo: T.int32 = T.var("int32")
-            with T.let(foo, 555):
-                foo + 77
-                ^^^^^^^^
+            foo: T.int32 = 555
+            foo + 77
+            ^^^^^^^^
         """,
         ROOT.attr("body").attr("value").attr("a"),
         """
-            foo: T.int32 = T.var("int32")
-            with T.let(foo, 555):
-                foo + 77
-                ^^^
+            foo: T.int32 = 555
+            foo + 77
+            ^^^
         """,
     ),
 )
@@ -406,6 +401,24 @@ def test_highlight_print_two_context_lines(path, expected_text):
     )
 
 
+def test_concise_scoping():
+    @T.prim_func
+    def f() -> None:
+        with T.allocate([1024], "float32", "global") as A:
+            A[0] = T.float32(0.0)
+        B = T.allocate([1024], "float32", "global")
+        B[1] = T.float32(1.0)
+
+    assert to_tvmscript(f) == format_script("""
+        @T.prim_func
+        def main() -> None:
+            with T.allocate([1024], "float32", "global") as A:
+                A[0] = T.float32(0)
+            B = T.allocate([1024], "float32", "global")
+            B[1] = T.float32(1)
+    """)
+
+
 @pytest.mark.xfail
 def test_roundtrippable_basic_fragment():
     # `B[vi] = A[vi] + 1.0`
@@ -419,3 +432,5 @@ def test_roundtrippable_basic_fragment():
         B[vi] = A[vi] + T.float32(1)
     """
     assert to_tvmscript(buffer_store_node) == format_script(expected)
+
+# test_concise_scoping()

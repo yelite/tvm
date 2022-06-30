@@ -40,6 +40,9 @@ String AsTVMScript(const ObjectRef& node, Map<String, String> ir_prefix, int32_t
   auto metadata_frame_ctx = ir_docsifier->WithFrame(metadata_frame);
   auto frame_ctx = ir_docsifier->WithFrame(tir_frame);
 
+  // Because we are printing a single element, concise scoping should be allowed by default
+  tir_frame->allow_concise_scoping_ = true;
+
   Doc doc = ir_docsifier->AsDoc<Doc>(MakeTraced(node));
 
   Array<Doc> doc_to_print;
