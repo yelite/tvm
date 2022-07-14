@@ -16,7 +16,7 @@
 # under the License.
 """Doc types for TVMScript Unified Printer"""
 
-from typing import List, Dict, Tuple, Optional, Union
+from typing import List, Dict, Tuple, Optional, Union, Sequence
 from enum import IntEnum, auto, unique
 
 import tvm._ffi
@@ -82,6 +82,22 @@ class ExprDoc(Object):
         kwargs_keys = list(kwargs.keys())
         kwargs_values = list(kwargs.values())
         return _ffi_api.ExprDocCall(self, args, kwargs_keys, kwargs_values)  # type: ignore
+
+
+class StmtDoc(Doc):
+    """Base class of statement doc"""
+
+    inline_comment: Optional[str]
+
+
+@tvm._ffi.register_object("script.printer.StmtBlockDoc")
+class StmtBlockDoc(Doc):
+    """The container doc that holds a list of StmtDoc."""
+
+    stmts: Sequence[StmtDoc]
+
+    def __init__(self, stmts: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.StmtBlockDoc, stmts)  # type: ignore
 
 
 @tvm._ffi.register_object("script.printer.LiteralDoc")
@@ -271,3 +287,112 @@ class SliceDoc(ExprDoc):
 
     def __init__(self, start: Optional[ExprDoc] = None, stop: Optional[ExprDoc] = None):
         self.__init_handle_by_constructor__(_ffi_api.SliceDoc, start, stop)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.AssignDoc")
+class AssignDoc(StmtDoc):
+    """Doc that represents assign statement."""
+
+    lhs: ExprDoc
+    rhs: Optional[ExprDoc]
+    annotation: Optional[ExprDoc]
+
+    def __init__(self, lhs: ExprDoc, rhs: Optional[ExprDoc], annotation: Optional[ExprDoc] = None):
+        self.__init_handle_by_constructor__(_ffi_api.AssignDoc, lhs, rhs, annotation)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.IfDoc")
+class IfDoc(StmtDoc):
+    """Doc that represent if-then-else statement."""
+
+    predicate: ExprDoc
+    then_branch: Sequence[StmtDoc]
+    else_branch: Sequence[StmtDoc]
+
+    def __init__(self, predicate: ExprDoc, then_branch: List[StmtDoc], else_branch: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.IfDoc, predicate, then_branch, else_branch)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.WhileDoc")
+class WhileDoc(StmtDoc):
+    """Doc that represents while statement."""
+
+    predicate: ExprDoc
+    body: Sequence[StmtDoc]
+
+    def __init__(self, predicate: ExprDoc, body: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.WhileDoc, predicate, body)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.ForDoc")
+class ForDoc(StmtDoc):
+    """Doc that represents for statement."""
+
+    lhs: ExprDoc
+    rhs: ExprDoc
+    body: Sequence[StmtDoc]
+
+    def __init__(self, lhs: ExprDoc, rhs: ExprDoc, body: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.ForDoc, lhs, rhs, body)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.ScopeDoc")
+class ScopeDoc(StmtDoc):
+    """
+    Doc that represents special scopes.
+
+    Specificially, this means the with statment in Python:
+
+    with <rhs> as <lhs>:
+        <body...>
+    """
+
+    lhs: Optional[ExprDoc]
+    rhs: ExprDoc
+    body: Sequence[StmtDoc]
+
+    def __init__(self, lhs: Optional[ExprDoc], rhs: ExprDoc, body: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.ScopeDoc, lhs, rhs, body)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.ExprStmtDoc")
+class ExprStmtDoc(StmtDoc):
+    """Doc that represents an expression as statement."""
+
+    expr: ExprDoc
+
+    def __init__(self, expr: ExprDoc):
+        self.__init_handle_by_constructor__(_ffi_api.ExprStmtDoc, expr)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.FunctionDoc")
+class FunctionDoc(StmtDoc):
+    """Doc that represents function definition."""
+
+    name: IdDoc
+    args: Sequence[AssignDoc]
+    decorators: Sequence[ExprDoc]
+    return_type: ExprDoc
+    body: Sequence[StmtDoc]
+
+    def __init__(
+        self,
+        name: IdDoc,
+        args: List[AssignDoc],
+        decorators: List[ExprDoc],
+        return_type: ExprDoc,
+        body: List[StmtDoc],
+    ):
+        self.__init_handle_by_constructor__(_ffi_api.FunctionDoc, name, args, decorators, return_type, body)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.ClassDoc")
+class ClassDoc(Doc):
+    """Doc that represents class definition."""
+
+    name: IdDoc
+    decorators: Sequence[ExprDoc]
+    body: Sequence[StmtDoc]
+
+    def __init__(self, name: IdDoc, decorators: List[ExprDoc], body: List[StmtDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.ClassDoc, name, decorators, body)  # type: ignore

@@ -120,6 +120,72 @@ class ExprDoc : public Doc {
 };
 
 /*!
+ * \brief The base class of statement doc.
+ *
+ * \sa StmtDoc
+ */
+class StmtDocNode : public DocNode {
+ public:
+  /*! \brief The inline comment that's attached to this doc. */
+  mutable Optional<String> inline_comment{NullOpt};
+
+  void VisitAttrs(AttrVisitor* v) {
+    DocNode::VisitAttrs(v);
+    v->Visit("inline_comment", &inline_comment);
+  }
+
+  static constexpr const char* _type_key = "script.printer.StmtDoc";
+  TVM_DECLARE_BASE_OBJECT_INFO(StmtDocNode, DocNode);
+};
+
+/*!
+ * \brief Reference type of StmtDocNode.
+ *
+ * \sa StmtDocNode
+ */
+class StmtDoc : public Doc {
+ protected:
+  StmtDoc() = default;
+
+ public:
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(StmtDoc, Doc, StmtDocNode);
+};
+
+/*!
+ * \brief The container doc that holds a list of StmtDoc.
+ *
+ * \sa StmtBlockDoc
+ */
+class StmtBlockDocNode : public DocNode {
+ public:
+  /*! \brief The list of statements. */
+  Array<StmtDoc> stmts;
+
+  void VisitAttrs(AttrVisitor* v) {
+    DocNode::VisitAttrs(v);
+    v->Visit("stmts", &stmts);
+  }
+
+  static constexpr const char* _type_key = "script.printer.StmtBlockDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(StmtBlockDocNode, DocNode);
+};
+
+/*!
+ * \brief Reference type of StmtBlockDocNode.
+ *
+ * \sa StmtBlockDocNode
+ */
+class StmtBlockDoc : public Doc {
+ public:
+  /*!
+   * \brief Constructor of StmtBlockDoc.
+   * \param stmts The list of statements.
+   */
+  explicit StmtBlockDoc(Array<StmtDoc> stmts);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(StmtBlockDoc, Doc, StmtBlockDocNode);
+};
+
+/*!
  * \brief Doc that represents literal value.
  *
  * \sa LiteralDoc
@@ -219,6 +285,7 @@ class IdDoc : public ExprDoc {
    * \param name The name of identifier.
    */
   explicit IdDoc(String name);
+  explicit IdDoc(std::nullptr_t) : ExprDoc(nullptr) {}
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(IdDoc, ExprDoc, IdDocNode);
 };
 
@@ -634,6 +701,366 @@ class SliceDoc : public Doc {
    */
   explicit SliceDoc(Optional<ExprDoc> start, Optional<ExprDoc> stop);
   TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(SliceDoc, Doc, SliceDocNode);
+};
+
+/*!
+ * \brief Doc that represents assign statement.
+ *
+ * \sa AssignDoc
+ */
+class AssignDocNode : public StmtDocNode {
+ public:
+  /*! \brief The left hand side of the assignment */
+  ExprDoc lhs{nullptr};
+  /*!
+   * \brief The right hand side of the assignment.
+   *
+   * If null, this doc represents declaration, e.g. `A: T.Buffer[(1,2)]`
+   * */
+  Optional<ExprDoc> rhs;
+  /*! \brief The type annotation of this assignment. */
+  Optional<ExprDoc> annotation;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("lhs", &lhs);
+    v->Visit("rhs", &rhs);
+    v->Visit("annotation", &annotation);
+  }
+
+  static constexpr const char* _type_key = "script.printer.AssignDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(AssignDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of AssignDocNode.
+ *
+ * \sa AssignDoc
+ */
+class AssignDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of AssignDoc.
+   * \param lhs The left hand side of the assignment.
+   * \param rhs The right hand side of the assignment.
+   * \param annotation The type annotation of this assigment.
+   */
+  explicit AssignDoc(ExprDoc lhs, Optional<ExprDoc> rhs, Optional<ExprDoc> annotation);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(AssignDoc, StmtDoc, AssignDocNode);
+};
+
+/*!
+ * \brief Doc that represent if-then-else statement.
+ *
+ * \sa IfDoc
+ */
+class IfDocNode : public StmtDocNode {
+ public:
+  /*! \brief The predicate of the if-then-else statement. */
+  ExprDoc predicate{nullptr};
+  /*! \brief The then branch of the if-then-else statement. */
+  Array<StmtDoc> then_branch;
+  /*! \brief The else branch of the if-then-else statement. */
+  Array<StmtDoc> else_branch;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("predicate", &predicate);
+    v->Visit("then_branch", &then_branch);
+    v->Visit("else_branch", &else_branch);
+  }
+
+  static constexpr const char* _type_key = "script.printer.IfDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(IfDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of IfDocNode.
+ *
+ * \sa IfDocNode
+ */
+class IfDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of IfDoc.
+   * \param predicate The predicate of the if-then-else statement.
+   * \param then_branch The then branch of the if-then-else statement.
+   * \param else_branch The else branch of the if-then-else statement.
+   */
+  explicit IfDoc(ExprDoc predicate, Array<StmtDoc> then_branch, Array<StmtDoc> else_branch);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(IfDoc, StmtDoc, IfDocNode);
+};
+
+/*!
+ * \brief Doc that represents while statement.
+ *
+ * \sa WhileDoc
+ */
+class WhileDocNode : public StmtDocNode {
+ public:
+  /*! \brief The predicate of the while statement. */
+  ExprDoc predicate{nullptr};
+  /*! \brief The body of the while statement. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("predicate", &predicate);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.WhileDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(WhileDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of WhileDocNode.
+ *
+ * \sa WhileDocNode
+ */
+class WhileDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of WhileDoc.
+   * \param predicate The predicate of the while statement.
+   * \param body The body of the while statement.
+   */
+  explicit WhileDoc(ExprDoc predicate, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(WhileDoc, StmtDoc, WhileDocNode);
+};
+
+/*!
+ * \brief Doc that represents for statement.
+ *
+ * Example:
+ * for <lhs> in <rhs>:
+ *   <body...>
+ *
+ * \sa ForDoc
+ */
+class ForDocNode : public StmtDocNode {
+ public:
+  /*! \brief The left hand side of the assignment of iterating variable. */
+  ExprDoc lhs{nullptr};
+  /*! \brief The right hand side of the assignment of iterating variable. */
+  ExprDoc rhs{nullptr};
+  /*! \brief The body of the for statement. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("lhs", &lhs);
+    v->Visit("rhs", &rhs);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ForDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ForDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of ForDocNode.
+ *
+ * \sa ForDocNode
+ */
+class ForDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of ForDoc.
+   * \param lhs The left hand side of the assignment of iterating variable.
+   * \param rhs The right hand side of the assignment of iterating variable.
+   * \param body The body of the for statement.
+   */
+  explicit ForDoc(ExprDoc lhs, ExprDoc rhs, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ForDoc, StmtDoc, ForDocNode);
+};
+
+/*!
+ * \brief Doc that represents special scopes.
+ *
+ * Specificially, this means the with statment in Python:
+ *
+ * with <rhs> as <lhs>:
+ *   <body...>
+ *
+ * \sa ScopeDoc
+ */
+class ScopeDocNode : public StmtDocNode {
+ public:
+  /*! \brief The name of the scoped variable. */
+  Optional<ExprDoc> lhs{NullOpt};
+  /*! \brief The value of the scoped variable. */
+  ExprDoc rhs{nullptr};
+  /*! \brief The body of the scope doc. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("lhs", &lhs);
+    v->Visit("rhs", &rhs);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ScopeDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ScopeDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of ScopeDocNode.
+ *
+ * \sa ScopeDocNode
+ */
+class ScopeDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of ScopeDoc.
+   * \param lhs The name of the scoped variable.
+   * \param rhs The value of the scoped variable.
+   * \param body The body of the scope doc.
+   */
+  explicit ScopeDoc(Optional<ExprDoc> lhs, ExprDoc rhs, Array<StmtDoc> body);
+
+  /*!
+   * \brief Constructor of ScopeDoc.
+   * \param rhs The value of the scoped variable.
+   * \param body The body of the scope doc.
+   */
+  explicit ScopeDoc(ExprDoc rhs, Array<StmtDoc> body);
+
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ScopeDoc, StmtDoc, ScopeDocNode);
+};
+
+/*!
+ * \brief Doc that represents an expression as statement.
+ *
+ * \sa ExprStmtDoc
+ */
+class ExprStmtDocNode : public StmtDocNode {
+ public:
+  /*! \brief The expression represented by this doc. */
+  ExprDoc expr{nullptr};
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("expr", &expr);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ExprStmtDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ExprStmtDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of ExprStmtDocNode.
+ *
+ * \sa ExprStmtDocNode
+ */
+class ExprStmtDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of ExprStmtDoc.
+   * \param expr The expression represented by this doc.
+   */
+  explicit ExprStmtDoc(ExprDoc expr);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ExprStmtDoc, StmtDoc, ExprStmtDocNode);
+};
+
+/*!
+ * \brief Doc that represents function definition.
+ *
+ * \sa FunctionDoc
+ */
+class FunctionDocNode : public StmtDocNode {
+ public:
+  /*! \brief The name of function. */
+  IdDoc name{nullptr};
+  /*!
+   * \brief The arguments of function.
+   *
+   * The `lhs` means argument name,
+   * `annotation` means argument type,
+   * and `rhs` means default value.
+   */
+  Array<AssignDoc> args;
+  /*! \brief Decorators of function. */
+  Array<ExprDoc> decorators;
+  /*! \brief The return type of function. */
+  ExprDoc return_type{nullptr};
+  /*! \brief The body of function. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    DocNode::VisitAttrs(v);
+    v->Visit("name", &name);
+    v->Visit("args", &args);
+    v->Visit("decorators", &decorators);
+    v->Visit("return_type", &return_type);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.FunctionDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(FunctionDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of FunctionDocNode.
+ *
+ * \sa FunctionDocNode
+ */
+class FunctionDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of FunctionDoc.
+   * \param name The name of function..
+   * \param args The arguments of function.
+   * \param decorators The decorator of function.
+   * \param return_type The return type of function.
+   * \param body The body of function.
+   */
+  explicit FunctionDoc(IdDoc name, Array<AssignDoc> args, Array<ExprDoc> decorators,
+                       ExprDoc return_type, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(FunctionDoc, StmtDoc, FunctionDocNode);
+};
+
+/*!
+ * \brief Doc that represents class definition.
+ *
+ * \sa ClassDoc
+ */
+class ClassDocNode : public DocNode {
+ public:
+  /*! \brief The name of class. */
+  IdDoc name{nullptr};
+  /*! \brief Decorators of class. */
+  Array<ExprDoc> decorators;
+  /*! \brief The body of class. */
+  Array<StmtDoc> body;
+
+  void VisitAttrs(AttrVisitor* v) {
+    DocNode::VisitAttrs(v);
+    v->Visit("name", &name);
+    v->Visit("decorators", &decorators);
+    v->Visit("body", &body);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ClassDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ClassDocNode, DocNode);
+};
+
+/*!
+ * \brief Reference type of ClassDocNode.
+ *
+ * \sa ClassDocNode
+ */
+class ClassDoc : public Doc {
+ public:
+  /*!
+   * \brief Constructor of ClassDoc.
+   * \param name The name of class.
+   * \param decorators The decorator of class.
+   * \param body The body of class.
+   */
+  explicit ClassDoc(IdDoc name, Array<ExprDoc> decorators, Array<StmtDoc> body);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ClassDoc, Doc, ClassDocNode);
 };
 
 }  // namespace printer
