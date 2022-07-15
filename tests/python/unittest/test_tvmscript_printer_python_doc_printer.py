@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 import pytest
+import itertools
 
 from tvm.script.printer.doc import (
     AssertDoc,
@@ -79,6 +80,7 @@ def format_script(s: str) -> str:
         (LiteralDoc(3.25), "3.25"),
         (LiteralDoc(-0.5), "-0.5"),
     ],
+    ids=itertools.count(),
 )
 def test_print_literal_doc(doc, expected):
     assert to_python_script(doc) == format_script(expected)
@@ -93,6 +95,7 @@ def test_print_literal_doc(doc, expected):
         "test_case",
         "test123",
     ],
+    ids=itertools.count(),
 )
 def test_print_id_doc(name):
     doc = IdDoc(name)
@@ -107,6 +110,7 @@ def test_print_id_doc(name):
         "Attr",
         "attr_1",
     ],
+    ids=itertools.count(),
 )
 def test_print_attr_doc(attr):
     doc = IdDoc("x").attr_access(attr)
@@ -145,6 +149,7 @@ def test_print_attr_doc(attr):
             "[x, y, z]",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_index_doc(indices, expected):
     doc = IdDoc("x").index_access(indices)
@@ -291,6 +296,7 @@ def test_operation_doc_test_exhaustive():
             "(x, y, key0=u, key1=v)",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_call_doc(args, kwargs, expected):
     doc = CallDoc(IdDoc("f"), *args, **kwargs)
@@ -317,6 +323,7 @@ def test_print_call_doc(args, kwargs, expected):
             "lambda x, y, z: 0",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_lambda_doc(args, expected):
     doc = LambdaDoc(args, body=LiteralDoc(0))
@@ -343,6 +350,7 @@ def test_print_lambda_doc(args, expected):
             "[x, y, z]",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_list_doc(elements, expected):
     doc = ListDoc(elements)
@@ -369,6 +377,7 @@ def test_print_list_doc(elements, expected):
             "(x, y, z)",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_tuple_doc(elements, expected):
     doc = TupleDoc(elements)
@@ -399,6 +408,7 @@ def test_print_tuple_doc(elements, expected):
             '{"key_x": x, "key_y": y, "key_z": z}',
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_dict_doc(content, expected):
     doc = DictDoc(content)
@@ -425,6 +435,7 @@ def test_print_dict_doc(content, expected):
             "1:2",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_slice_doc(slice_doc, expected):
     doc = IdDoc("x").index_access([slice_doc])
@@ -450,6 +461,7 @@ def test_print_slice_doc(slice_doc, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_stmt_block_doc(stmts, expected):
     doc = StmtBlockDoc(stmts)
@@ -480,6 +492,7 @@ def test_print_stmt_block_doc(stmts, expected):
             "x, (y, z) = z",
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_assign_doc(doc, expected):
     assert to_python_script(doc) == format_script(expected)
@@ -517,6 +530,7 @@ def test_print_assign_doc(doc, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_if_doc(then_branch, else_branch, expected):
     doc = IfDoc(IdDoc("pred"), then_branch, else_branch)
@@ -541,6 +555,7 @@ def test_print_if_doc(then_branch, else_branch, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_while_doc(body, expected):
     doc = WhileDoc(IdDoc("pred"), body)
@@ -565,6 +580,7 @@ def test_print_while_doc(body, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_for_doc(body, expected):
     doc = ForDoc(IdDoc("x"), IdDoc("y"), body)
@@ -607,6 +623,7 @@ def test_print_for_doc(body, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_scope_doc(lhs, body, expected):
     doc = ScopeDoc(lhs, CallDoc(IdDoc("context")), body)
@@ -634,6 +651,7 @@ def test_print_expr_stmt_doc():
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_assert_doc(msg, expected):
     test = LiteralDoc(True)
@@ -659,6 +677,7 @@ def test_print_assert_doc(msg, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_return_doc(value, expected):
     doc = ReturnDoc(value)
@@ -747,6 +766,7 @@ def test_print_return_doc(value, expected):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_function_doc(args, decorators, body, expected):
     doc = FunctionDoc(IdDoc("func"), args, decorators, LiteralDoc(None), body)
@@ -833,6 +853,7 @@ def get_func_doc_for_class(name):
             """,
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_class_doc(decorators, body, expected):
     doc = ClassDoc(IdDoc("TestClass"), decorators, body)
@@ -980,6 +1001,7 @@ def test_print_class_doc(decorators, body, expected):
             ''',
         ),
     ],
+    ids=itertools.count(),
 )
 def test_print_doc_comment(doc, comment, expected):
     doc.comment = comment
