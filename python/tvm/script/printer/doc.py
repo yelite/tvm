@@ -87,7 +87,7 @@ class ExprDoc(Object):
 class StmtDoc(Doc):
     """Base class of statement doc"""
 
-    inline_comment: Optional[str]
+    comment: Optional[str]
 
 
 @tvm._ffi.register_object("script.printer.StmtBlockDoc")
@@ -393,6 +393,7 @@ class ClassDoc(Doc):
     name: IdDoc
     decorators: Sequence[ExprDoc]
     body: Sequence[StmtDoc]
+    comment: Optional[str]
 
     def __init__(self, name: IdDoc, decorators: List[ExprDoc], body: List[StmtDoc]):
         self.__init_handle_by_constructor__(_ffi_api.ClassDoc, name, decorators, body)  # type: ignore

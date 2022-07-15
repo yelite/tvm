@@ -292,9 +292,17 @@ def test_assign_doc(lhs, rhs, annotation):
     assert doc.annotation == annotation
 
 
-def test_invalid_assign_doc():
+@pytest.mark.parametrize(
+    "lhs, rhs, annotation",
+    [
+        (IdDoc("x"), None, None),
+        (TupleDoc([IdDoc("x"), IdDoc("y")]), None, IdDoc("int")),
+        (TupleDoc([IdDoc("x"), IdDoc("y")]), IdDoc("u"), IdDoc("int")),
+    ],
+)
+def test_invalid_assign_doc(lhs, rhs, annotation):
     with pytest.raises(ValueError) as e:
-        AssignDoc(IdDoc("x"), rhs=None, annotation=None)
+        AssignDoc(lhs, rhs, annotation)
     assert "AssignDoc" in str(e.value)
 
 
@@ -317,7 +325,13 @@ def test_invalid_assign_doc():
 def test_if_doc(then_branch, else_branch):
     predicate = IdDoc("x")
 
-    doc = IfDoc(predicate, then_branch, else_branch)
+    if not then_branch and not else_branch:
+        with pytest.raises(ValueError) as e:
+            IfDoc(predicate, then_branch, else_branch)
+        assert "IfDoc" in str(e.value)
+        return
+    else:
+        doc = IfDoc(predicate, then_branch, else_branch)
 
     assert doc.predicate == predicate
     assert list(doc.then_branch) == then_branch
@@ -457,3 +471,12 @@ def test_class_doc(decorators, body):
     assert doc.name == name
     assert list(doc.decorators) == decorators
     assert list(doc.body) == body
+
+
+def test_stmt_doc_comment():
+    doc = ExprStmtDoc(IdDoc("x"))
+    assert doc.comment is None
+
+    comment = "test comment"
+    doc.comment = comment
+    assert doc.comment == comment

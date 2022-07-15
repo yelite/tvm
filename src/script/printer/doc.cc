@@ -123,9 +123,12 @@ SliceDoc::SliceDoc(Optional<ExprDoc> start, Optional<ExprDoc> stop) {
 }
 
 AssignDoc::AssignDoc(ExprDoc lhs, Optional<ExprDoc> rhs, Optional<ExprDoc> annotation) {
-  ObjectPtr<AssignDocNode> n = make_object<AssignDocNode>();
   CHECK(rhs.defined() || annotation.defined())
       << "ValueError: At least one of rhs and annotation needs to be non-null for AssignDoc.";
+  CHECK(lhs->IsInstance<IdDocNode>() || annotation == nullptr)
+      << "ValueError: annotation can only be nonnull if lhs is an identifier.";
+
+  ObjectPtr<AssignDocNode> n = make_object<AssignDocNode>();
   n->lhs = lhs;
   n->rhs = rhs;
   n->annotation = annotation;
@@ -133,6 +136,9 @@ AssignDoc::AssignDoc(ExprDoc lhs, Optional<ExprDoc> rhs, Optional<ExprDoc> annot
 }
 
 IfDoc::IfDoc(ExprDoc predicate, Array<StmtDoc> then_branch, Array<StmtDoc> else_branch) {
+  CHECK(!then_branch.empty() || !else_branch.empty())
+      << "ValueError: At least one of the then branch or else branch needs to be non-empty.";
+
   ObjectPtr<IfDocNode> n = make_object<IfDocNode>();
   n->predicate = predicate;
   n->then_branch = then_branch;

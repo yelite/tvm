@@ -17,16 +17,25 @@
 import pytest
 
 from tvm.script.printer.doc import (
+    AssignDoc,
     CallDoc,
+    ClassDoc,
     DictDoc,
+    ExprStmtDoc,
+    ForDoc,
+    FunctionDoc,
     IdDoc,
+    IfDoc,
     LambdaDoc,
     ListDoc,
     LiteralDoc,
     OperationDoc,
     OperationKind,
+    ScopeDoc,
     SliceDoc,
+    StmtBlockDoc,
     TupleDoc,
+    WhileDoc,
 )
 from tvm.script.printer.doc_printer import to_python_script
 
@@ -36,10 +45,19 @@ def format_script(s: str) -> str:
     Remove leading and trailing blank lines, and make the minimum idention 0
     """
     s = s.strip("\n")
+
     non_empty_lines = [line for line in s.splitlines() if line and not line.isspace()]
+    if not non_empty_lines:
+        # no actual content
+        return "\n"
+
     line_indents = [len(line) - len(line.lstrip(" ")) for line in non_empty_lines]
     spaces_to_remove = min(line_indents)
-    return "\n".join(line[spaces_to_remove:] for line in s.splitlines()) + "\n"
+
+    cleaned_lines = "\n".join(line[spaces_to_remove:] for line in s.splitlines())
+    if not cleaned_lines.endswith("\n"):
+        cleaned_lines += "\n"
+    return cleaned_lines
 
 
 @pytest.mark.parametrize(
@@ -409,3 +427,364 @@ def test_print_dict_doc(content, expected):
 def test_print_slice_doc(slice_doc, expected):
     doc = IdDoc("x").index_access([slice_doc])
     assert to_python_script(doc) == format_script(f"x[{expected}]")
+
+
+@pytest.mark.parametrize(
+    "stmts, expected",
+    [
+        (
+            [],
+            "",
+        ),
+        (
+            [ExprStmtDoc(IdDoc("x"))],
+            "x",
+        ),
+        (
+            [ExprStmtDoc(IdDoc("x")), ExprStmtDoc(IdDoc("y"))],
+            """
+            x
+            y
+            """,
+        ),
+    ],
+)
+def test_print_stmt_block_doc(stmts, expected):
+    doc = StmtBlockDoc(stmts)
+    assert to_python_script(doc).strip() == format_script(expected).strip()
+
+
+@pytest.mark.parametrize(
+    "doc, expected",
+    [
+        (
+            AssignDoc(IdDoc("x"), IdDoc("y"), None),
+            "x = y",
+        ),
+        (
+            AssignDoc(IdDoc("x"), IdDoc("y"), IdDoc("int")),
+            "x: int = y",
+        ),
+        (
+            AssignDoc(IdDoc("x"), None, IdDoc("int")),
+            "x: int",
+        ),
+        (
+            AssignDoc(TupleDoc([IdDoc("x"), IdDoc("y")]), IdDoc("z"), None),
+            "x, y = z",
+        ),
+        (
+            AssignDoc(TupleDoc([IdDoc("x"), TupleDoc([IdDoc("y"), IdDoc("z")])]), IdDoc("z"), None),
+            "x, (y, z) = z",
+        ),
+    ],
+)
+def test_print_assign_doc(doc, expected):
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "then_branch, else_branch, expected",
+    [
+        (
+            [ExprStmtDoc(IdDoc("x"))],
+            [],
+            """
+            if pred:
+                x
+            """,
+        ),
+        (
+            [],
+            [ExprStmtDoc(IdDoc("y"))],
+            """
+            if pred:
+                pass
+            else:
+                y
+            """,
+        ),
+        (
+            [ExprStmtDoc(IdDoc("x"))],
+            [ExprStmtDoc(IdDoc("y"))],
+            """
+            if pred:
+                x
+            else:
+                y
+            """,
+        ),
+    ],
+)
+def test_print_if_doc(then_branch, else_branch, expected):
+    doc = IfDoc(IdDoc("pred"), then_branch, else_branch)
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        (
+            [ExprStmtDoc(IdDoc("x"))],
+            """
+            while pred:
+                x
+            """,
+        ),
+        (
+            [],
+            """
+            while pred:
+                pass
+            """,
+        ),
+    ],
+)
+def test_print_while_doc(body, expected):
+    doc = WhileDoc(IdDoc("pred"), body)
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "body, expected",
+    [
+        (
+            [ExprStmtDoc(IdDoc("x"))],
+            """
+            for x in y:
+                x
+            """,
+        ),
+        (
+            [],
+            """
+            for x in y:
+                pass
+            """,
+        ),
+    ],
+)
+def test_print_for_doc(body, expected):
+    doc = ForDoc(IdDoc("x"), IdDoc("y"), body)
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "lhs, body, expected",
+    [
+        (
+            IdDoc("c"),
+            [ExprStmtDoc(IdDoc("x"))],
+            """
+            with context() as c:
+                x
+            """,
+        ),
+        (
+            IdDoc("c"),
+            [],
+            """
+            with context() as c:
+                pass
+            """,
+        ),
+        (
+            None,
+            [],
+            """
+            with context():
+                pass
+            """,
+        ),
+        (
+            None,
+            [ExprStmtDoc(IdDoc("x"))],
+            """
+            with context():
+                x
+            """,
+        ),
+    ],
+)
+def test_print_scope_doc(lhs, body, expected):
+    doc = ScopeDoc(lhs, CallDoc(IdDoc("context")), body)
+    assert to_python_script(doc) == format_script(expected)
+
+
+def test_print_expr_stmt_doc():
+    doc = ExprStmtDoc(CallDoc(IdDoc("f"), IdDoc("x")))
+    assert to_python_script(doc) == format_script("f(x)")
+
+
+@pytest.mark.parametrize(
+    "args, decorators, body, expected",
+    [
+        (
+            [],
+            [],
+            [],
+            """
+            def func() -> None:
+                pass
+            """,
+        ),
+        (
+            [AssignDoc(IdDoc("x"), rhs=None, annotation=IdDoc("int"))],
+            [],
+            [],
+            """
+            def func(x: int) -> None:
+                pass
+            """,
+        ),
+        (
+            [AssignDoc(IdDoc("x"), rhs=LiteralDoc(1), annotation=IdDoc("int"))],
+            [],
+            [],
+            """
+            def func(x: int = 1) -> None:
+                pass
+            """,
+        ),
+        (
+            [],
+            [IdDoc("wrap")],
+            [],
+            """
+            @wrap
+            def func() -> None:
+                pass
+            """,
+        ),
+        (
+            [],
+            [IdDoc("wrap_outter"), IdDoc("wrap_inner")],
+            [],
+            """
+            @wrap_outter
+            @wrap_inner
+            def func() -> None:
+                pass
+            """,
+        ),
+        (
+            [
+                AssignDoc(IdDoc("x"), rhs=None, annotation=IdDoc("int")),
+                AssignDoc(IdDoc("y"), rhs=LiteralDoc(1), annotation=IdDoc("int")),
+            ],
+            [IdDoc("wrap")],
+            [],
+            """
+            @wrap
+            def func(x: int, y: int = 1) -> None:
+                pass
+            """,
+        ),
+        (
+            [
+                AssignDoc(IdDoc("x"), rhs=None, annotation=IdDoc("int")),
+                AssignDoc(IdDoc("y"), rhs=LiteralDoc(1), annotation=IdDoc("int")),
+            ],
+            [IdDoc("wrap")],
+            [
+                AssignDoc(IdDoc("y"), OperationDoc(OperationKind.Add, [IdDoc("x"), LiteralDoc(1)])),
+                AssignDoc(IdDoc("y"), OperationDoc(OperationKind.Sub, [IdDoc("y"), LiteralDoc(1)])),
+            ],
+            """
+            @wrap
+            def func(x: int, y: int = 1) -> None:
+                y = x + 1
+                y = y - 1
+            """,
+        ),
+    ],
+)
+def test_print_function_doc(args, decorators, body, expected):
+    doc = FunctionDoc(IdDoc("func"), args, decorators, LiteralDoc(None), body)
+    assert to_python_script(doc) == format_script(expected)
+
+
+def get_func_doc_for_class(name):
+    args = [
+        AssignDoc(IdDoc("x"), rhs=None, annotation=IdDoc("int")),
+        AssignDoc(IdDoc("y"), rhs=LiteralDoc(1), annotation=IdDoc("int")),
+    ]
+    body = [
+        AssignDoc(IdDoc("y"), OperationDoc(OperationKind.Add, [IdDoc("x"), LiteralDoc(1)])),
+        AssignDoc(IdDoc("y"), OperationDoc(OperationKind.Sub, [IdDoc("y"), LiteralDoc(1)])),
+    ]
+    return FunctionDoc(
+        name=IdDoc(name),
+        args=args,
+        decorators=[IdDoc("wrap")],
+        return_type=LiteralDoc(None),
+        body=body,
+    )
+
+
+@pytest.mark.parametrize(
+    "decorators, body, expected",
+    [
+        (
+            [],
+            [],
+            """
+            class TestClass:
+                pass
+            """,
+        ),
+        (
+            [IdDoc("wrap")],
+            [],
+            """
+            @wrap
+            class TestClass:
+                pass
+            """,
+        ),
+        (
+            [IdDoc("wrap_outter"), IdDoc("wrap_inner")],
+            [],
+            """
+            @wrap_outter
+            @wrap_inner
+            class TestClass:
+                pass
+            """,
+        ),
+        (
+            [IdDoc("wrap")],
+            [get_func_doc_for_class("f1")],
+            """
+            @wrap
+            class TestClass:
+                @wrap
+                def f1(x: int, y: int = 1) -> None:
+                    y = x + 1
+                    y = y - 1
+
+            """,
+        ),
+        (
+            [IdDoc("wrap")],
+            [get_func_doc_for_class("f1"), get_func_doc_for_class("f2")],
+            """
+            @wrap
+            class TestClass:
+                @wrap
+                def f1(x: int, y: int = 1) -> None:
+                    y = x + 1
+                    y = y - 1
+
+                @wrap
+                def f2(x: int, y: int = 1) -> None:
+                    y = x + 1
+                    y = y - 1
+
+            """,
+        ),
+    ],
+)
+def test_print_class_doc(decorators, body, expected):
+    doc = ClassDoc(IdDoc("TestClass"), decorators, body)
+    assert to_python_script(doc) == format_script(expected)

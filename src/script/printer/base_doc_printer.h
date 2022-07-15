@@ -134,6 +134,51 @@ class DocPrinter {
   virtual void PrintTypedDoc(const SliceDoc& doc) = 0;
 
   /*!
+   * \brief Virtual method to print a StmtBlockDoc
+   */
+  virtual void PrintTypedDoc(const StmtBlockDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a AssignDoc
+   */
+  virtual void PrintTypedDoc(const AssignDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a IfDoc
+   */
+  virtual void PrintTypedDoc(const IfDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a WhileDoc
+   */
+  virtual void PrintTypedDoc(const WhileDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a ForDoc
+   */
+  virtual void PrintTypedDoc(const ForDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a ScopeDoc
+   */
+  virtual void PrintTypedDoc(const ScopeDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a ExprStmtDoc
+   */
+  virtual void PrintTypedDoc(const ExprStmtDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a FunctionDoc
+   */
+  virtual void PrintTypedDoc(const FunctionDoc& doc) = 0;
+
+  /*!
+   * \brief Virtual method to print a ClassDoc
+   */
+  virtual void PrintTypedDoc(const ClassDoc& doc) = 0;
+
+  /*!
    * \brief Increase the indent level of any content to be
    *        printed after this call
    */

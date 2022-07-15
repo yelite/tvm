@@ -126,12 +126,19 @@ class ExprDoc : public Doc {
  */
 class StmtDocNode : public DocNode {
  public:
-  /*! \brief The inline comment that's attached to this doc. */
-  mutable Optional<String> inline_comment{NullOpt};
+  /*!
+   * \brief The comment of this doc.
+   *
+   * The actual position of the comment depends on the type of Doc
+   * and also the DocPrinter implmenetation. It could be on the same
+   * line as the statment, or the line above, or inside the statement
+   * if it spans over multiple lines.
+   * */
+  mutable Optional<String> comment{NullOpt};
 
   void VisitAttrs(AttrVisitor* v) {
     DocNode::VisitAttrs(v);
-    v->Visit("inline_comment", &inline_comment);
+    v->Visit("comment", &comment);
   }
 
   static constexpr const char* _type_key = "script.printer.StmtDoc";
@@ -1034,6 +1041,13 @@ class ClassDocNode : public DocNode {
   Array<ExprDoc> decorators;
   /*! \brief The body of class. */
   Array<StmtDoc> body;
+
+  /*!
+   * \brief The comment of this class.
+   *
+   * This will be printed as class docstring.
+   */
+  mutable Optional<String> comment{NullOpt};
 
   void VisitAttrs(AttrVisitor* v) {
     DocNode::VisitAttrs(v);
