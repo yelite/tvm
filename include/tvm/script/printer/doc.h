@@ -1068,7 +1068,7 @@ class FunctionDocNode : public StmtDocNode {
   Array<StmtDoc> body;
 
   void VisitAttrs(AttrVisitor* v) {
-    DocNode::VisitAttrs(v);
+    StmtDocNode::VisitAttrs(v);
     v->Visit("name", &name);
     v->Visit("args", &args);
     v->Visit("decorators", &decorators);
@@ -1105,7 +1105,7 @@ class FunctionDoc : public StmtDoc {
  *
  * \sa ClassDoc
  */
-class ClassDocNode : public DocNode {
+class ClassDocNode : public StmtDocNode {
  public:
   /*! \brief The name of class. */
   IdDoc name{nullptr};
@@ -1114,22 +1114,15 @@ class ClassDocNode : public DocNode {
   /*! \brief The body of class. */
   Array<StmtDoc> body;
 
-  /*!
-   * \brief The comment of this class.
-   *
-   * This will be printed as class docstring.
-   */
-  mutable Optional<String> comment{NullOpt};
-
   void VisitAttrs(AttrVisitor* v) {
-    DocNode::VisitAttrs(v);
+    StmtDocNode::VisitAttrs(v);
     v->Visit("name", &name);
     v->Visit("decorators", &decorators);
     v->Visit("body", &body);
   }
 
   static constexpr const char* _type_key = "script.printer.ClassDoc";
-  TVM_DECLARE_FINAL_OBJECT_INFO(ClassDocNode, DocNode);
+  TVM_DECLARE_FINAL_OBJECT_INFO(ClassDocNode, StmtDocNode);
 };
 
 /*!
@@ -1137,7 +1130,7 @@ class ClassDocNode : public DocNode {
  *
  * \sa ClassDocNode
  */
-class ClassDoc : public Doc {
+class ClassDoc : public StmtDoc {
  public:
   /*!
    * \brief Constructor of ClassDoc.
@@ -1146,7 +1139,7 @@ class ClassDoc : public Doc {
    * \param body The body of class.
    */
   explicit ClassDoc(IdDoc name, Array<ExprDoc> decorators, Array<StmtDoc> body);
-  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ClassDoc, Doc, ClassDocNode);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ClassDoc, StmtDoc, ClassDocNode);
 };
 
 }  // namespace printer

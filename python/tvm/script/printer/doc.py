@@ -21,7 +21,7 @@ from enum import IntEnum, auto, unique
 
 import tvm._ffi
 import tvm.ir.container
-from tvm.runtime import Object
+from tvm.runtime import Object, _ffi_node_api
 from tvm.tir import FloatImm, IntImm
 
 from . import _ffi_api
@@ -87,7 +87,13 @@ class ExprDoc(Object):
 class StmtDoc(Doc):
     """Base class of statement doc"""
 
-    comment: Optional[str]
+    @property
+    def comment(self) -> Optional[str]:
+        return self.__getattr__("comment")
+
+    @comment.setter
+    def comment(self, value):
+        return _ffi_api.StmtDocSetComment(self, value)  # type: ignore
 
 
 @tvm._ffi.register_object("script.printer.StmtBlockDoc")
@@ -372,7 +378,7 @@ class AssertDoc(StmtDoc):
     test: ExprDoc
     msg: Optional[ExprDoc]
 
-    def __init__(self, test: ExprDoc, msg: Optional[ExprDoc]):
+    def __init__(self, test: ExprDoc, msg: Optional[ExprDoc] = None):
         self.__init_handle_by_constructor__(_ffi_api.AssertDoc, test, msg)  # type: ignore
 
 
@@ -408,13 +414,12 @@ class FunctionDoc(StmtDoc):
 
 
 @tvm._ffi.register_object("script.printer.ClassDoc")
-class ClassDoc(Doc):
+class ClassDoc(StmtDoc):
     """Doc that represents class definition."""
 
     name: IdDoc
     decorators: Sequence[ExprDoc]
     body: Sequence[StmtDoc]
-    comment: Optional[str]
 
     def __init__(self, name: IdDoc, decorators: List[ExprDoc], body: List[StmtDoc]):
         self.__init_handle_by_constructor__(_ffi_api.ClassDoc, name, decorators, body)  # type: ignore

@@ -750,7 +750,7 @@ def test_print_return_doc(value, expected):
 )
 def test_print_function_doc(args, decorators, body, expected):
     doc = FunctionDoc(IdDoc("func"), args, decorators, LiteralDoc(None), body)
-    assert to_python_script(doc) == format_script(expected)
+    assert to_python_script(doc) == format_script(expected)  # test
 
 
 def get_func_doc_for_class(name):
@@ -837,3 +837,166 @@ def get_func_doc_for_class(name):
 def test_print_class_doc(decorators, body, expected):
     doc = ClassDoc(IdDoc("TestClass"), decorators, body)
     assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "doc, comment, expected",
+    [
+        (
+            AssignDoc(IdDoc("x"), IdDoc("y"), IdDoc("int")),
+            "comment",
+            """
+            x: int = y  # comment
+            """,
+        ),
+        (
+            IfDoc(IdDoc("x"), [ExprStmtDoc(IdDoc("y"))], [ExprStmtDoc(IdDoc("z"))]),
+            "comment",
+            """
+            # comment
+            if x:
+                y
+            else:
+                z
+            """,
+        ),
+        (
+            IfDoc(IdDoc("x"), [ExprStmtDoc(IdDoc("y"))], [ExprStmtDoc(IdDoc("z"))]),
+            "comment line 1\ncomment line 2",
+            """
+            # comment line 1
+            # comment line 2
+            if x:
+                y
+            else:
+                z
+            """,
+        ),
+        (
+            WhileDoc(
+                LiteralDoc(True),
+                [
+                    AssignDoc(IdDoc("x"), IdDoc("y")),
+                ],
+            ),
+            "comment",
+            """
+            # comment
+            while True:
+                x = y
+            """,
+        ),
+        (
+            ForDoc(IdDoc("x"), IdDoc("y"), []),
+            "comment",
+            """
+            # comment
+            for x in y:
+                pass
+            """,
+        ),
+        (
+            ScopeDoc(IdDoc("x"), IdDoc("y"), []),
+            "comment",
+            """
+            # comment
+            with y as x:
+                pass
+            """,
+        ),
+        (
+            ExprStmtDoc(IdDoc("x")),
+            "comment",
+            """
+            x  # comment
+            """,
+        ),
+        (
+            AssertDoc(LiteralDoc(True)),
+            "comment",
+            """
+            assert True  # comment
+            """,
+        ),
+        (
+            ReturnDoc(LiteralDoc(1)),
+            "comment",
+            """
+            return 1  # comment
+            """,
+        ),
+        (
+            get_func_doc_for_class("f"),
+            "comment",
+            '''
+            @wrap
+            def f(x: int, y: int = 1) -> None:
+                """
+                comment
+                """
+                y = x + 1
+                y = y - 1
+            ''',
+        ),
+        (
+            get_func_doc_for_class("f"),
+            "comment line 1\n\ncomment line 3",
+            '''
+            @wrap
+            def f(x: int, y: int = 1) -> None:
+                """
+                comment line 1
+
+                comment line 3
+                """
+                y = x + 1
+                y = y - 1
+            ''',
+        ),
+        (
+            ClassDoc(IdDoc("TestClass"), decorators=[IdDoc("wrap")], body=[]),
+            "comment",
+            '''
+            @wrap
+            class TestClass:
+                """
+                comment
+                """
+                pass
+            ''',
+        ),
+        (
+            ClassDoc(IdDoc("TestClass"), decorators=[IdDoc("wrap")], body=[]),
+            "comment line 1\n\ncomment line 3",
+            '''
+            @wrap
+            class TestClass:
+                """
+                comment line 1
+
+                comment line 3
+                """
+                pass
+            ''',
+        ),
+    ],
+)
+def test_print_doc_comment(doc, comment, expected):
+    doc.comment = comment
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [
+        AssignDoc(IdDoc("x"), IdDoc("y"), IdDoc("int")),
+        ExprStmtDoc(IdDoc("x")),
+        AssertDoc(IdDoc("x")),
+        ReturnDoc(IdDoc("x")),
+    ],
+)
+def test_print_invalid_multiline_doc_comment(doc):
+    doc.comment = "1\n2"
+    with pytest.raises(ValueError) as e:
+        to_python_script(doc)
+    assert "cannot have newline" in str(e.value)

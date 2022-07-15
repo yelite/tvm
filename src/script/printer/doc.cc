@@ -224,6 +224,10 @@ TVM_REGISTER_GLOBAL("script.printer.ExprDocCall")
     .set_body_method<ExprDoc, ExprDocNode, ExprDoc, Array<ExprDoc>, Array<String>, Array<ExprDoc>>(
         &ExprDocNode::Call);
 
+TVM_REGISTER_NODE_TYPE(StmtDocNode);
+TVM_REGISTER_GLOBAL("script.printer.StmtDocSetComment")
+    .set_body_typed([](StmtDoc doc, Optional<String> comment) { doc->comment = comment; });
+
 TVM_REGISTER_NODE_TYPE(StmtBlockDocNode);
 TVM_REGISTER_GLOBAL("script.printer.StmtBlockDoc").set_body_typed([](Array<StmtDoc> stmts) {
   return StmtBlockDoc(stmts);

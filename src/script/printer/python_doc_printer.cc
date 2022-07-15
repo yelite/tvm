@@ -16,12 +16,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 #include <tvm/runtime/logging.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/script/printer/doc.h>
 
+#include <algorithm>
+#include <string>
+
 #include "../../support/str_escape.h"
+#include "../../support/utils.h"
 #include "./base_doc_printer.h"
 
 namespace tvm {
@@ -97,25 +100,39 @@ class PythonDocPrinter : public DocPrinter {
 
   void MaybePrintCommentInline(const StmtDoc& stmt) {
     if (stmt->comment.defined()) {
-      output_ << " # " << stmt->comment.value();
+      const std::string& comment = stmt->comment.value();
+      bool has_newline = std::find(comment.begin(), comment.end(), '\n') != comment.end();
+      CHECK(!has_newline) << "ValueError: the comment string of " << stmt->GetTypeKey()
+                          << " cannot have newline.";
+      output_ << "  # " << comment;
     }
   }
 
   void MaybePrintCommentWithNewLine(const StmtDoc& stmt) {
     if (stmt->comment.defined()) {
-      output_ << "# " << stmt->comment.value();
-      NewLine();
+      std::vector<std::string> comment_lines = support::Split(stmt->comment.value(), '\n');
+      for (const std::string& line : comment_lines) {
+        output_ << "# " << line;
+        NewLine();
+      }
     }
   }
 
   void PrintBlockComment(const String& comment) {
     IncreaseIndent();
-    NewLine();
-    output_ << "\"\"\"";
-    NewLine();
-    output_ << comment;
-    NewLine();
-    output_ << "\"\"\"";
+    NewLine() << "\"\"\"";
+
+    std::vector<std::string> comment_lines = support::Split(comment, '\n');
+    for (const std::string& line : comment_lines) {
+      if (line.empty()) {
+        // No indentation on empty line
+        output_ << "\n";
+      } else {
+        NewLine() << line;
+      }
+    }
+
+    NewLine() << "\"\"\"";
     DecreaseIndent();
   }
 };
