@@ -52,6 +52,8 @@ class PythonDocPrinter : public DocPrinter {
   void PrintTypedDoc(const WhileDoc& doc) final;
   void PrintTypedDoc(const ForDoc& doc) final;
   void PrintTypedDoc(const ExprStmtDoc& doc) final;
+  void PrintTypedDoc(const AssertDoc& doc) final;
+  void PrintTypedDoc(const ReturnDoc& doc) final;
   void PrintTypedDoc(const ScopeDoc& doc) final;
   void PrintTypedDoc(const FunctionDoc& doc) final;
   void PrintTypedDoc(const ClassDoc& doc) final;
@@ -386,8 +388,24 @@ void PythonDocPrinter::PrintTypedDoc(const ScopeDoc& doc) {
 }
 
 void PythonDocPrinter::PrintTypedDoc(const ExprStmtDoc& doc) {
-  MaybePrintCommentWithNewLine(doc);
   PrintDoc(doc->expr);
+  MaybePrintCommentInline(doc);
+}
+
+void PythonDocPrinter::PrintTypedDoc(const AssertDoc& doc) {
+  output_ << "assert ";
+  PrintDoc(doc->test);
+  if (doc->msg.defined()) {
+    output_ << ", ";
+    PrintDoc(doc->msg.value());
+  }
+  MaybePrintCommentInline(doc);
+}
+
+void PythonDocPrinter::PrintTypedDoc(const ReturnDoc& doc) {
+  output_ << "return ";
+  PrintDoc(doc->value);
+  MaybePrintCommentInline(doc);
 }
 
 void PythonDocPrinter::PrintTypedDoc(const FunctionDoc& doc) {

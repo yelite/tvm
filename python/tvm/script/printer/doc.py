@@ -365,6 +365,27 @@ class ExprStmtDoc(StmtDoc):
         self.__init_handle_by_constructor__(_ffi_api.ExprStmtDoc, expr)  # type: ignore
 
 
+@tvm._ffi.register_object("script.printer.AssertDoc")
+class AssertDoc(StmtDoc):
+    """Doc that represents assert statement."""
+
+    test: ExprDoc
+    msg: Optional[ExprDoc]
+
+    def __init__(self, test: ExprDoc, msg: Optional[ExprDoc]):
+        self.__init_handle_by_constructor__(_ffi_api.AssertDoc, test, msg)  # type: ignore
+
+
+@tvm._ffi.register_object("script.printer.ReturnDoc")
+class ReturnDoc(StmtDoc):
+    """Doc that represents return statement."""
+
+    value: ExprDoc
+
+    def __init__(self, value: ExprDoc):
+        self.__init_handle_by_constructor__(_ffi_api.ReturnDoc, value)  # type: ignore
+
+
 @tvm._ffi.register_object("script.printer.FunctionDoc")
 class FunctionDoc(StmtDoc):
     """Doc that represents function definition."""

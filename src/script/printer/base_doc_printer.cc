@@ -72,6 +72,10 @@ void DocPrinter::PrintDoc(const Doc& doc) {
     PrintTypedDoc(GetRef<ScopeDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<ExprStmtDocNode>()) {
     PrintTypedDoc(GetRef<ExprStmtDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<AssertDocNode>()) {
+    PrintTypedDoc(GetRef<AssertDoc>(doc_node));
+  } else if (const auto* doc_node = doc.as<ReturnDocNode>()) {
+    PrintTypedDoc(GetRef<ReturnDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<FunctionDocNode>()) {
     PrintTypedDoc(GetRef<FunctionDoc>(doc_node));
   } else if (const auto* doc_node = doc.as<ClassDocNode>()) {

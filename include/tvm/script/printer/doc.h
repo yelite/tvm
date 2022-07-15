@@ -972,6 +972,78 @@ class ExprStmtDoc : public StmtDoc {
 };
 
 /*!
+ * \brief Doc that represents assert statement.
+ *
+ * \sa AssertDoc
+ */
+class AssertDocNode : public StmtDocNode {
+ public:
+  /*! \brief The expression to test. */
+  ExprDoc test{nullptr};
+  /*! \brief The optional error message when assertion failed. */
+  Optional<ExprDoc> msg{NullOpt};
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("test", &test);
+    v->Visit("msg", &msg);
+  }
+
+  static constexpr const char* _type_key = "script.printer.AssertDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(AssertDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of AssertDocNode.
+ *
+ * \sa AssertDocNode
+ */
+class AssertDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of AssertDoc.
+   * \param test The expression to test.
+   * \param msg The optional error message when assertion failed.
+   */
+  explicit AssertDoc(ExprDoc test, Optional<ExprDoc> msg = NullOpt);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(AssertDoc, StmtDoc, AssertDocNode);
+};
+
+/*!
+ * \brief Doc that represents return statement.
+ *
+ * \sa ReturnDoc
+ */
+class ReturnDocNode : public StmtDocNode {
+ public:
+  /*! \brief The value to return. */
+  ExprDoc value{nullptr};
+
+  void VisitAttrs(AttrVisitor* v) {
+    StmtDocNode::VisitAttrs(v);
+    v->Visit("value", &value);
+  }
+
+  static constexpr const char* _type_key = "script.printer.ReturnDoc";
+  TVM_DECLARE_FINAL_OBJECT_INFO(ReturnDocNode, StmtDocNode);
+};
+
+/*!
+ * \brief Reference type of ReturnDocNode.
+ *
+ * \sa ReturnDocNode
+ */
+class ReturnDoc : public StmtDoc {
+ public:
+  /*!
+   * \brief Constructor of ReturnDoc.
+   * \param value The value to return.
+   */
+  explicit ReturnDoc(ExprDoc value);
+  TVM_DEFINE_NOTNULLABLE_OBJECT_REF_METHODS(ReturnDoc, StmtDoc, ReturnDocNode);
+};
+
+/*!
  * \brief Doc that represents function definition.
  *
  * \sa FunctionDoc

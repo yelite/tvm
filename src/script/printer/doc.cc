@@ -183,6 +183,19 @@ ExprStmtDoc::ExprStmtDoc(ExprDoc expr) {
   this->data_ = std::move(n);
 }
 
+AssertDoc::AssertDoc(ExprDoc test, Optional<ExprDoc> msg) {
+  ObjectPtr<AssertDocNode> n = make_object<AssertDocNode>();
+  n->test = test;
+  n->msg = msg;
+  this->data_ = std::move(n);
+}
+
+ReturnDoc::ReturnDoc(ExprDoc value) {
+  ObjectPtr<ReturnDocNode> n = make_object<ReturnDocNode>();
+  n->value = value;
+  this->data_ = std::move(n);
+}
+
 FunctionDoc::FunctionDoc(IdDoc name, Array<AssignDoc> args, Array<ExprDoc> decorators,
                          ExprDoc return_type, Array<StmtDoc> body) {
   ObjectPtr<FunctionDocNode> n = make_object<FunctionDocNode>();
@@ -310,6 +323,17 @@ TVM_REGISTER_GLOBAL("script.printer.ScopeDoc")
 TVM_REGISTER_NODE_TYPE(ExprStmtDocNode);
 TVM_REGISTER_GLOBAL("script.printer.ExprStmtDoc").set_body_typed([](ExprDoc expr) {
   return ExprStmtDoc(expr);
+});
+
+TVM_REGISTER_NODE_TYPE(AssertDocNode);
+TVM_REGISTER_GLOBAL("script.printer.AssertDoc")
+    .set_body_typed([](ExprDoc test, Optional<ExprDoc> msg = NullOpt) {
+      return AssertDoc(test, msg);
+    });
+
+TVM_REGISTER_NODE_TYPE(ReturnDocNode);
+TVM_REGISTER_GLOBAL("script.printer.ReturnDoc").set_body_typed([](ExprDoc value) {
+  return ReturnDoc(value);
 });
 
 TVM_REGISTER_NODE_TYPE(FunctionDocNode);

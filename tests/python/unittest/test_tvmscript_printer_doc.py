@@ -41,6 +41,8 @@ from tvm.script.printer.doc import (
     ForDoc,
     ScopeDoc,
     ExprStmtDoc,
+    AssertDoc,
+    ReturnDoc,
     FunctionDoc,
     ClassDoc,
 )
@@ -405,6 +407,30 @@ def test_expr_stmt_doc():
     doc = ExprStmtDoc(expr)
 
     assert doc.expr == expr
+
+
+@pytest.mark.parametrize(
+    "msg",
+    [
+        None,
+        LiteralDoc("msg"),
+    ],
+)
+def test_assert_doc(msg):
+    test = IdDoc("x")
+
+    doc = AssertDoc(test, msg)
+
+    assert doc.test == test
+    assert doc.msg == msg
+
+
+def test_return_doc():
+    value = IdDoc("x")
+
+    doc = ReturnDoc(value)
+
+    assert doc.value == value
 
 
 @pytest.mark.parametrize(

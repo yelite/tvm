@@ -17,6 +17,7 @@
 import pytest
 
 from tvm.script.printer.doc import (
+    AssertDoc,
     AssignDoc,
     CallDoc,
     ClassDoc,
@@ -31,6 +32,7 @@ from tvm.script.printer.doc import (
     LiteralDoc,
     OperationDoc,
     OperationKind,
+    ReturnDoc,
     ScopeDoc,
     SliceDoc,
     StmtBlockDoc,
@@ -614,6 +616,53 @@ def test_print_scope_doc(lhs, body, expected):
 def test_print_expr_stmt_doc():
     doc = ExprStmtDoc(CallDoc(IdDoc("f"), IdDoc("x")))
     assert to_python_script(doc) == format_script("f(x)")
+
+
+@pytest.mark.parametrize(
+    "msg, expected",
+    [
+        (
+            None,
+            """
+            assert True
+            """,
+        ),
+        (
+            LiteralDoc("test message"),
+            """
+            assert True, "test message"
+            """,
+        ),
+    ],
+)
+def test_print_assert_doc(msg, expected):
+    test = LiteralDoc(True)
+
+    doc = AssertDoc(test, msg)
+
+    assert to_python_script(doc) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (
+            LiteralDoc(None),
+            """
+            return None
+            """,
+        ),
+        (
+            IdDoc("x"),
+            """
+            return x
+            """,
+        ),
+    ],
+)
+def test_print_return_doc(value, expected):
+    doc = ReturnDoc(value)
+    assert to_python_script(doc) == format_script(expected)
 
 
 @pytest.mark.parametrize(
