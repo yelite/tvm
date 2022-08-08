@@ -105,6 +105,9 @@ class VarTableNode : public Object {
   std::unordered_set<String> defined_names;
 };
 
+/*!
+ * \breif Reference type of VarTableNode.
+ */
 class VarTable : public ObjectRef {
  public:
   /*!
