@@ -20,8 +20,8 @@
 #define TVM_SCRIPT_PRINTER_SYMBOL_TABLE_H_
 
 #include <tvm/node/node.h>
+#include <tvm/node/object_path.h>
 #include <tvm/script/printer/doc.h>
-#include <tvm/script/printer/traced_object.h>
 
 namespace tvm {
 namespace script {
