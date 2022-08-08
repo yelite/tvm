@@ -20,8 +20,6 @@
 #include <dmlc/logging.h>
 #include <gtest/gtest.h>
 #include <tvm/node/object_path.h>
-#include <tvm/runtime/packed_func.h>
-#include <tvm/script/printer/traced_object.h>
 #include <tvm/script/printer/var_table.h>
 #include <tvm/tir/var.h>
 
