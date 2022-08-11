@@ -20,57 +20,70 @@ These only make sure parameter can be passed to the C++ functions
 correctly. The test for the functionality of VarTable is in C++.
 """
 
-import pytest
-
 from tvm.runtime import ObjectPath
-from tvm.script.printer.doc import IdDoc
+from tvm.script.printer.doc import LiteralDoc
+from tvm.script.printer.frame import VarDefFrame
 from tvm.script.printer.var_table import VarTable
 from tvm.tir import Var
 
 
-@pytest.mark.parametrize(
-    "name_or_factory",
-    [
-        "a",
-        lambda: IdDoc("a"),
-    ],
-)
-def test_define(name_or_factory):
+def test_define():
     var_table = VarTable()
-    a = Var("a", dtype="int32")
+    var_name = "a"
+    var_obj = Var(var_name, dtype="int32")
     object_path = ObjectPath.root().attr("a")
+    frame = VarDefFrame()
 
-    id_doc = var_table.define(a, name_or_factory, object_path)
+    id_doc = var_table.define(var_obj, var_name, object_path, frame)
+
+    assert id_doc.name == "a"
+    assert list(id_doc.source_paths) == [object_path]
+
+    id_doc = var_table.get_var_doc(var_obj, object_path)
 
     assert id_doc.name == "a"
     assert list(id_doc.source_paths) == [object_path]
 
-    id_doc = var_table.get_var_doc(a, object_path)
 
-    assert id_doc.name == "a"
-    assert list(id_doc.source_paths) == [object_path]
+def test_define_by_doc():
+    var_table = VarTable()
+    var_name = "a"
+    var_obj = Var(var_name, dtype="int32")
+    object_path = ObjectPath.root().attr("a")
+    frame = VarDefFrame()
+
+    var_table.define_by_doc(var_obj, lambda: LiteralDoc(var_name), frame)
+
+    var_doc = var_table.get_var_doc(var_obj, object_path)
+
+    assert isinstance(var_doc, LiteralDoc)
+    assert var_doc.value == var_name
+    assert list(var_doc.source_paths) == [object_path]
 
 
 def test_is_var_defined():
     var_table = VarTable()
-
     a = Var("a", dtype="int32")
     object_path = ObjectPath.root().attr("a")
+    frame = VarDefFrame()
 
-    id_doc = var_table.define(a, "a", object_path)
+    var_table.define(a, "a", object_path, frame)
 
     assert var_table.is_var_defined(a)
     assert a in var_table
 
 
-def test_remove():
+def test_var_out_of_scope():
     var_table = VarTable()
-
-    a = Var("a", dtype="int32")
+    var_name = "a"
+    var_obj = Var(var_name, dtype="int32")
     object_path = ObjectPath.root().attr("a")
+    frame = VarDefFrame()
 
-    id_doc = var_table.define(a, "a", object_path)
-    var_table.remove(a)
+    var_table.define(var_obj, var_name, object_path, frame)
 
-    assert not var_table.is_var_defined(a)
-    assert a not in var_table
+    with frame:
+        assert var_obj in var_table
+
+    assert var_obj not in var_table
+    assert var_table.get_var_doc(var_obj, object_path) is None

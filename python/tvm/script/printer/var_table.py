@@ -16,13 +16,14 @@
 # under the License.
 """Functions to print doc into text format"""
 
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 from tvm._ffi import register_object
 from tvm.runtime import Object, ObjectPath
 
 from . import _ffi_api
-from .doc import ExprDoc
+from .doc import ExprDoc, IdDoc
+from .frame import Frame
 
 
 @register_object("script.printer.VarTable")
@@ -38,48 +39,46 @@ class VarTable(Object):
         """
         self.__init_handle_by_constructor__(_ffi_api.VarTable)  # type: ignore # pylint: disable=no-member
 
-    def define(
-        self,
-        obj: Object,
-        factory_or_name: Union[str, Callable[[ObjectPath], ExprDoc]],
-        object_path: ObjectPath,
-    ) -> ExprDoc:
+    def define(self, obj: Object, name_hint: str, object_path: ObjectPath, frame: Frame) -> IdDoc:
         """
-        Define a variable.
+        Define a variable by name.
 
         Parameters
         ----------
         obj : Object
             The variable object.
-        factory_or_name : Union[str, Callable[[ObjectPath], Doc]]
-            The identifier string, or a function that returns doc.
+        name_hint : str
+            The hint for variable name.
         object_path : ObjectPath
             The object path to be associated with the returned ExprDoc.
+        frame : Frame
+            Then frame that this variable is defined in.
 
         Returns
         -------
-        doc : ExprDoc
+        doc : IdDoc
             The doc for this variable.
         """
-        if isinstance(factory_or_name, str):  # pylint: disable=no-else-return
-            return _ffi_api.VarTableDefineByName(self, obj, factory_or_name, object_path)
-        elif callable(factory_or_name):  # pylint: disable=no-else-return
-            return _ffi_api.VarTableDefineByFactory(self, obj, factory_or_name, object_path)
-        else:
-            raise TypeError(
-                f"`factory_or_name` should be str or callable, but it's {type(factory_or_name)}"
-            )
+        return _ffi_api.VarTableDefine(self, obj, name_hint, object_path, frame)
 
-    def remove(self, obj: Object):
+    def define_by_doc(self, obj: Object, doc_factory: Callable[[], ExprDoc], frame: Frame) -> None:
         """
-        Remove a variable.
+        Define a variable by ExprDoc.
 
         Parameters
         ----------
         obj : Object
             The variable object.
+        doc_factory : Callable[[], ExprDoc]
+            The hint for variable name.
+        frame : Frame
+            Then frame that this variable is defined in.
+
+        Returns
+        -------
+        None
         """
-        _ffi_api.VarTableRemove(self, obj)
+        _ffi_api.VarTableDefineByDoc(self, obj, doc_factory, frame)
 
     def get_var_doc(self, obj: Object, object_path: ObjectPath) -> Optional[ExprDoc]:
         """

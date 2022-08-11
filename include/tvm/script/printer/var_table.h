@@ -22,6 +22,8 @@
 #include <tvm/node/node.h>
 #include <tvm/node/object_path.h>
 #include <tvm/script/printer/doc.h>
+#include <tvm/script/printer/frame.h>
+#include <tvm/script/printer/traced_object.h>
 
 namespace tvm {
 namespace script {
@@ -40,41 +42,53 @@ class VarTableNode : public Object {
  public:
   void VisitAttrs(AttrVisitor*) {}
 
-  using DocFactory = std::function<ExprDoc()>;
-
-  /*!
-   * \brief Define variable by doc factory.
-   * \param obj The variable object.
-   * \param doc_factory The function to return an ExprDoc object for this variable.
-   * \param object_path The object_path for the returned ExprDoc.
-   *
-   * \return The doc for this variable.
-   *
-   * This function takes a DocFactory instead of Doc. It's because GetVarDoc needs to
-   * return a new Doc object with the object_path parameter as its source path. Currently
-   * there isn't a good way to deep copy a TVMObject so it needs to have a DocFactory to
-   * do this work.
-   */
-  ExprDoc Define(const ObjectRef& obj, DocFactory doc_factory, const ObjectPath& object_path);
-
   /*!
    * \brief Define variable by name.
    * \param obj The variable object.
    * \param name_hint The hint for variable name.
    * \param object_path The object_path for the returned ExprDoc.
+   * \param frame The frame that this variable is defined in.
    *
    * \return The id doc for this variable.
    *
    * This function will rename the variable to avoid name conflict with other variables
    * in the table.
    */
-  IdDoc Define(const ObjectRef& obj, const String& name_hint, const ObjectPath& object_path);
+  IdDoc Define(const ObjectRef& obj, const String& name_hint, const ObjectPath& object_path,
+               const Frame& frame);
 
   /*!
-   * \brief Remove variable.
-   * \param obj The variable to remove.
+   * \brief Define variable by name.
+   * \param obj The variable object.
+   * \param name_hint The hint for variable name.
+   * \param frame The frame that this variable is defined in.
+   *
+   * \return The id doc for this variable.
+   *
+   * This is a shortcut version of `Define` which accepts a traced string.
    */
-  void Remove(const ObjectRef& obj);
+  IdDoc Define(const ObjectRef& obj, const TracedObject<String>& name_hint, const Frame& frame) {
+    return Define(obj, name_hint.Get(), name_hint.GetPath(), frame);
+  }
+
+  using DocFactory = std::function<ExprDoc()>;
+
+  /*!
+   * \brief Define variable by doc factory.
+   * \param obj The variable object.
+   * \param doc_factory The function to return an ExprDoc object for this variable.
+   * \param frame The frame that this variable is defined in.
+   *
+   * This function is a special form of `Define`. Variable is mapped to ExprDoc rather
+   * than IdDoc. It's useful when a variable is implicitly defined without a name, like
+   * the buf->data in TIR, which should be mapped to `AttrDoc(IdDoc("<buffer_name>"), "data")`.
+   *
+   * This function takes a DocFactory instead of Doc. It's because GetVarDoc needs to
+   * return a new Doc object with the object_path parameter as its source path. Currently
+   * there isn't a good way to deep copy a TVMObject so it needs to have a function to
+   * do the object construction every time it's called.
+   */
+  void DefineByDoc(const ObjectRef& obj, DocFactory doc_factory, const Frame& frame);
 
   /*!
    * \brief Get the doc for variable.
@@ -97,6 +111,8 @@ class VarTableNode : public Object {
   TVM_DECLARE_FINAL_OBJECT_INFO(VarTableNode, Object);
 
  private:
+  void RemoveVar(const ObjectRef& obj);
+
   struct VariableInfo {
     DocFactory doc_factory;
     Optional<String> name;
