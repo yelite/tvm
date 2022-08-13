@@ -84,9 +84,9 @@ class VarTableNode : public Object {
    * the buf->data in TIR, which should be mapped to `AttrDoc(IdDoc("<buffer_name>"), "data")`.
    *
    * This function takes a DocFactory instead of Doc. It's because GetVarDoc needs to
-   * return a new Doc object with the object_path parameter as its source path. Currently
-   * there isn't a good way to deep copy a TVMObject so it needs to have a function to
-   * do the object construction every time it's called.
+   * return a new Doc object with the object_path parameter as its source path. 
+   * Currently there isn't a good way to deep copy a TVMObject so it needs to 
+   * have a function to do the object construction every time it's called.
    */
   void DefineByDoc(const ObjectRef& obj, DocFactory doc_factory, const Frame& frame);
 
