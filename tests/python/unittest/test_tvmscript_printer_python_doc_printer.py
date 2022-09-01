@@ -584,9 +584,10 @@ def test_print_while_doc(body, expected):
 
 
 @pytest.mark.parametrize(
-    "body, expected",
+    "i, body, expected",
     [
         (
+            IdDoc("x"),
             [ExprStmtDoc(IdDoc("x"))],
             """
             for x in y:
@@ -594,17 +595,26 @@ def test_print_while_doc(body, expected):
             """,
         ),
         (
+            IdDoc("x"),
             [],
             """
             for x in y:
                 pass
             """,
         ),
+        (
+            TupleDoc([IdDoc("x"), IdDoc("u")]),
+            [ExprStmtDoc(IdDoc("x"))],
+            """
+            for x, u in y:
+                x
+            """,
+        ),
     ],
     ids=itertools.count(),
 )
-def test_print_for_doc(body, expected):
-    doc = ForDoc(IdDoc("x"), IdDoc("y"), body)
+def test_print_for_doc(i, body, expected):
+    doc = ForDoc(i, IdDoc("y"), body)
     assert to_python_script(doc) == format_script(expected)
 
 
@@ -624,6 +634,14 @@ def test_print_for_doc(body, expected):
             [],
             """
             with context() as c:
+                pass
+            """,
+        ),
+        (
+            TupleDoc([IdDoc("c"), IdDoc("d")]),
+            [],
+            """
+            with context() as (c, d):
                 pass
             """,
         ),

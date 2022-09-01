@@ -43,6 +43,8 @@ from tvm.tir import (
     FloatImm,
     FloorDiv,
     FloorMod,
+    For,
+    ForKind,
     IfThenElse,
     IntImm,
     IterVar,
@@ -968,5 +970,100 @@ def test_attr_stmt_launch_thread_multiple():
     T.launch_thread(i, 8)
     T.launch_thread(i, 24)
     i
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+@pytest.mark.parametrize(
+    "for_kind, f_name",
+    [
+        (ForKind.SERIAL, "serial"),
+        (ForKind.PARALLEL, "parallel"),
+        (ForKind.VECTORIZED, "vectorized"),
+        (ForKind.UNROLLED, "unroll"),
+    ],
+)
+def test_for_single_loop(for_kind, f_name):
+    i = Var("i", "int32")
+    node = For(i, 3, 13, for_kind, Evaluate(i), annotations={"abc": StringImm("xyz")})
+    expected = f"""
+    for i in T.{f_name}(3, 16, annotations={{"abc": "xyz"}}):
+        i
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_for_thread_binding():
+    i = Var("i", "int32")
+    iter_var = IterVar(Range(1, 5), i, 2, "blockIdx.x")
+    node = For(i, 0, 16, ForKind.THREAD_BINDING, Evaluate(i), iter_var)
+    expected = """
+    for i in T.thread_binding(16, thread="blockIdx.x"):
+        i
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_for_merged_simple_loops():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    k = Var("k", "int32")
+    loop3 = For(k, 0, 16, ForKind.SERIAL, Evaluate(i + j + k))
+    loop2 = For(j, 0, 16, ForKind.SERIAL, loop3)
+    loop1 = For(i, 0, 16, ForKind.SERIAL, loop2)
+    node = loop1
+    expected = """
+    for i, j, k in T.grid(16, 16, 16):
+        i + j + k
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_for_nested_non_simple_loops_non_zero_min_val():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    k = Var("k", "int32")
+    loop3 = For(k, 0, 16, ForKind.SERIAL, Evaluate(i + j + k))
+    loop2 = For(j, 1, 16, ForKind.SERIAL, loop3)
+    loop1 = For(i, 0, 16, ForKind.SERIAL, loop2)
+    node = loop1
+    expected = """
+    for i in T.serial(16):
+        for j in T.serial(1, 17):
+            for k in T.serial(16):
+                i + j + k
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_for_nested_non_simple_loops_var_dependency():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    k = Var("k", "int32")
+    loop3 = For(k, 0, 16, ForKind.SERIAL, Evaluate(i + j + k))
+    loop2 = For(j, 0, i, ForKind.SERIAL, loop3)
+    loop1 = For(i, 0, 16, ForKind.SERIAL, loop2)
+    node = loop1
+    expected = """
+    for i in T.serial(16):
+        for j, k in T.grid(i, 16):
+            i + j + k
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_for_nested_non_simple_loops_non_serial_for_kind():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    k = Var("k", "int32")
+    loop3 = For(k, 0, 16, ForKind.SERIAL, Evaluate(i + j + k))
+    loop2 = For(j, 0, 16, ForKind.VECTORIZED, loop3)
+    loop1 = For(i, 0, 16, ForKind.SERIAL, loop2)
+    node = loop1
+    expected = """
+    for i in T.serial(16):
+        for j in T.vectorized(16):
+            for k in T.serial(16):
+                i + j + k
     """
     assert as_tir_script(node) == format_script(expected)

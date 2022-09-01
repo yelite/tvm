@@ -34,6 +34,12 @@ TIRTopLevelFrame::TIRTopLevelFrame() : TIRFrame(make_object<TIRTopLevelFrameNode
 
 TIRGeneralFrame::TIRGeneralFrame() : TIRFrame(make_object<TIRGeneralFrameNode>()) {}
 
+TIRLoopFrame::TIRLoopFrame() : TIRFrame(make_object<TIRLoopFrameNode>()) {}
+
+TIRLoopFrame::TIRLoopFrame(tir::For for_stmt) : TIRFrame(make_object<TIRLoopFrameNode>()) {
+  this->get()->loops.push_back(for_stmt);
+}
+
 void PostOrderVisitExprTraced(const TracedObject<PrimExpr>& expr,
                               const std::function<void(const TracedObject<PrimExpr>&)>& callback) {
   PostOrderVisitTraced(

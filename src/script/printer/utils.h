@@ -57,6 +57,17 @@ Array<ExprDoc> AsExprDocArray(std::initializer_list<RefType>&& refs,
   return AsDocArray<ExprDoc>(std::move(refs), ir_docsifier);
 }
 
+template <typename FrameType>
+Array<FrameType> GetFrames(const IRDocsifier& p) {
+  Array<FrameType> result;
+  for (auto it = p->frames.rbegin(); it != p->frames.rend(); ++it) {
+    if (const auto* f = (*it).as<typename FrameType::ContainerType>()) {
+      result.push_back(GetRef<FrameType>(f));
+    }
+  }
+  return result;
+}
+
 inline DictDoc AsDictDoc(const TracedMap<String, ObjectRef>& dict,
                          const IRDocsifier& ir_docsifier) {
   Array<ExprDoc> keys;

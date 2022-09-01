@@ -23,6 +23,7 @@
 #include <tvm/script/printer/ir_docsifier.h>
 #include <tvm/script/printer/traced_object.h>
 #include <tvm/script/printer/traced_object_functor.h>
+#include <tvm/tir/analysis.h>
 #include <tvm/tir/op.h>
 #include <tvm/tir/stmt.h>
 
@@ -418,6 +419,123 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
             .WithParentExpr(attr_expr)
             .WithBody(AsStmtDocArray(body, p))
             .ToDoc(p);
+      }
+    });
+
+Map<tir::Var, tir::For> GetLoopVarMap(IRDocsifier p) {
+  Map<tir::Var, tir::For> result;
+  for (const TIRLoopFrame& frame : GetFrames<TIRLoopFrame>(p)) {
+    for (const tir::For& loop : frame->loops) {
+      result.Set(loop->loop_var, loop);
+    }
+  }
+  return result;
+}
+
+bool IsSimpleLoop(const TracedObject<tir::For>& stmt,
+                  const std::vector<TracedObject<tir::For>>& previous_loops) {
+  auto is_var_of_previous_loops = [&previous_loops](const tir::VarNode* v) {
+    return std::find_if(previous_loops.begin(), previous_loops.end(),
+                        [v](const TracedObject<tir::For>& for_stmt) {
+                          return for_stmt.Get()->loop_var.get() == v;
+                        }) != previous_loops.end();
+  };
+  return stmt.Get()->kind == tir::ForKind::kSerial && stmt.Get()->annotations.empty() &&
+         tir::is_zero(stmt.Get()->min) &&
+         !tir::UsesVar(stmt.Get()->min, is_var_of_previous_loops) &&
+         !tir::UsesVar(stmt.Get()->extent, is_var_of_previous_loops);
+}
+
+StmtDoc PrintRegularLoop(const TracedObject<tir::For>& stmt, IRDocsifier p) {
+  TIRLoopFrame frame(stmt.Get());
+  WithCtx with_frame = p->WithFrame(frame);
+
+  auto loop_var = stmt.GetAttr(&tir::ForNode::loop_var);
+  IdDoc loop_var_doc = DefineVar(loop_var, frame, p);
+
+  Array<ExprDoc> loop_var_vars;
+  Array<String> loop_var_kwarg_keys;
+  Array<ExprDoc> loop_var_kwarg_values;
+  auto min = stmt.GetAttr(&tir::ForNode::min);
+  auto extent = stmt.GetAttr(&tir::ForNode::extent);
+  if (tir::is_zero(min.Get())) {
+    auto extent_doc = p->AsExprDoc(extent);
+    // Also source the doc to `min`, so that we have something to highlight
+    extent_doc->source_paths.push_back(min.GetPath());
+    loop_var_vars.push_back(extent_doc);
+  } else {
+    arith::Analyzer analyzer;
+    loop_var_vars.push_back(p->AsExprDoc(min));
+    auto raw_max = analyzer.Simplify(min.Get() + extent.Get());
+    auto max = MakeTraced(raw_max, extent.GetPath());
+    loop_var_vars.push_back(p->AsExprDoc(max));
+  }
+  auto thread_binding = stmt.GetAttr(&tir::ForNode::thread_binding);
+  if (thread_binding.defined()) {
+    loop_var_kwarg_keys.push_back("thread");
+    loop_var_kwarg_values.push_back(
+        LiteralDoc::Str(thread_binding.value().GetAttr(&tir::IterVarNode::thread_tag)));
+  }
+  auto annotations = stmt.GetAttr(&tir::ForNode::annotations);
+  if (!annotations.empty()) {
+    loop_var_kwarg_keys.push_back("annotations");
+    loop_var_kwarg_values.push_back(AsDictDoc(annotations, p));
+  }
+  auto kind = stmt.GetAttr(&tir::ForNode::kind);
+  auto kind_str =
+      kind.ApplyFunc([](tir::ForKind kind) { return String(tir::ForKind2String(kind)); });
+  ExprDoc loop_var_rhs =
+      TIR(p)->Attr(kind_str)->Call(loop_var_vars, loop_var_kwarg_keys, loop_var_kwarg_values);
+
+  Array<StmtDoc> body = AsStmtDocArray(stmt.GetAttr(&tir::ForNode::body), p);
+
+  return ForDoc(loop_var_doc, loop_var_rhs, body);
+}
+
+StmtDoc PrintMergedSimpleLoops(const std::vector<TracedObject<tir::For>>& stmts, IRDocsifier p) {
+  TIRLoopFrame frame;
+  WithCtx with_frame = p->WithFrame(frame);
+
+  Array<ExprDoc> loop_var_docs;
+  Array<ExprDoc> loop_var_extent_docs;
+  for (const TracedObject<tir::For>& loop : stmts) {
+    frame->loops.push_back(loop.Get());
+    auto loop_var = loop.GetAttr(&tir::ForNode::loop_var);
+    loop_var_docs.push_back(DefineVar(loop_var, frame, p));
+    auto extent = loop.GetAttr(&tir::ForNode::extent);
+    loop_var_extent_docs.push_back(p->AsExprDoc(extent));
+  }
+
+  ExprDoc loop_var_rhs = TIR(p)->Attr("grid")->Call(loop_var_extent_docs);
+
+  Array<StmtDoc> body = AsStmtDocArray(stmts.back().GetAttr(&tir::ForNode::body), p);
+
+  return ForDoc(TupleDoc(loop_var_docs), loop_var_rhs, body);
+}
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::For>([](TracedObject<tir::For> stmt, IRDocsifier p) {
+      std::vector<TracedObject<tir::For>> simple_loops;
+
+      auto next_for = stmt;
+      while (true) {
+        if (!IsSimpleLoop(next_for, simple_loops)) {
+          break;
+        }
+        simple_loops.push_back(next_for);
+
+        auto body = next_for.GetAttr(&tir::ForNode::body);
+        if (!body.Get()->IsInstance<tir::ForNode>()) {
+          break;
+        }
+
+        next_for = body.Downcast<tir::For>();
+      }
+
+      if (simple_loops.size() > 1) {
+        return PrintMergedSimpleLoops(simple_loops, p);
+      } else {
+        return PrintRegularLoop(stmt, p);
       }
     });
 

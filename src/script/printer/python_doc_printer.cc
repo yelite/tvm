@@ -544,7 +544,11 @@ void PythonDocPrinter::PrintTypedDoc(const WhileDoc& doc) {
 void PythonDocPrinter::PrintTypedDoc(const ForDoc& doc) {
   MaybePrintCommentWithNewLine(doc);
   output_ << "for ";
-  PrintDoc(doc->lhs);
+  if (const auto* tuple_doc = doc->lhs.as<TupleDocNode>()) {
+    PrintJoinedDocs(tuple_doc->elements, ", ");
+  } else {
+    PrintDoc(doc->lhs);
+  }
   output_ << " in ";
   PrintDoc(doc->rhs);
   output_ << ":";

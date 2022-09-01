@@ -79,6 +79,32 @@ class TIRGeneralFrame : public TIRFrame {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRGeneralFrame, TIRFrame, TIRGeneralFrameNode);
 };
 
+class TIRLoopFrameNode : public TIRFrameNode {
+ public:
+  /*
+   * This field is for loop merging. For example,
+   * \code
+   * for i, j, k in T.grid(128, 128, 128):
+   *     ...
+   * \endcode
+   * corresponds to three nested Loop statements, but
+   * it only creates one TIRLoopFrame during printing.
+   *
+   * The first element is the outer-most loop.
+   */
+  Array<tir::For> loops{};
+
+  static constexpr const char* _type_key = "script.printer.TIRLoopFrame";
+  TVM_DECLARE_BASE_OBJECT_INFO(TIRLoopFrameNode, TIRFrameNode);
+};
+
+class TIRLoopFrame : public TIRFrame {
+ public:
+  TIRLoopFrame();
+  explicit TIRLoopFrame(tir::For for_stmt);
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRLoopFrame, TIRFrame, TIRLoopFrameNode);
+};
+
 inline IdDoc TIR(const IRDocsifier& p) { return IdDoc(p->ir_prefix.Get("tir").value_or("T")); }
 
 ExprDoc PrintOpCall(TracedObject<tir::Call> call, IRDocsifier p);
