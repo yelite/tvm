@@ -1,4 +1,3 @@
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -261,7 +260,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
           buffers_to_define.push_back(buffer);
         }
       }
-      DefineBuffers(buffers_to_define, let_frame, p, TIR(p)->Attr("decl_buffer"),
+      DefineBuffers(buffers_to_define, {}, let_frame, p, TIR(p)->Attr("decl_buffer"),
                     [&body_doc](IdDoc buf_identifier, ExprDoc buf_definition) {
                       body_doc.push_back(AssignDoc(buf_identifier, buf_definition, NullOpt));
                     });
@@ -339,12 +338,13 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       ExprDoc alloc_buffer_expr_doc =
           TIR(p)->Attr("allocate")->Call(alloc_args, alloc_kwarg_keys, alloc_kwarg_values);
 
-      IdDoc alloc_buffer_id_doc = DefineBuffers({allocated_buffer}, current_frame, p,
+      IdDoc alloc_buffer_id_doc = DefineBuffers({allocated_buffer}, {}, current_frame, p,
                                                 TIR(p)->Attr("Buffer"), [](IdDoc, ExprDoc) {})[0];
       alloc_buffer_id_doc->source_paths = {stmt.GetAttr(&tir::AllocateNode::buffer_var).GetPath()};
 
       Array<StmtDoc> body_doc;
-      DefineBuffers(allocate_usage.aliasing_buffers, current_frame, p, TIR(p)->Attr("decl_buffer"),
+      DefineBuffers(allocate_usage.aliasing_buffers, {}, current_frame, p,
+                    TIR(p)->Attr("decl_buffer"),
                     [&body_doc](IdDoc buf_identifier, ExprDoc buf_definition) {
                       body_doc.push_back(AssignDoc(buf_identifier, buf_definition, NullOpt));
                     });
@@ -537,6 +537,217 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       } else {
         return PrintRegularLoop(stmt, p);
       }
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::Block>([](TracedObject<tir::Block> stmt, IRDocsifier p) {
+      TIRGeneralFrame frame;
+      WithCtx with_frame = p->WithFrame(frame);
+
+      Array<StmtDoc> body;
+
+      // Print definition of the iter vars in order to print the block
+      // fragment in a round-trippable way.
+      for (auto iter_var : stmt.GetAttr(&tir::BlockNode::iter_vars)) {
+        auto var = iter_var.GetAttr(&tir::IterVarNode::var);
+        if (!p->vars->IsVarDefined(var.Get())) {
+          IdDoc var_doc = p->AsDoc<IdDoc>(var);
+          body.push_back(ExprStmtDoc(IterVarDef(iter_var, p)));
+        }
+      }
+
+      auto reads = stmt.GetAttr(&tir::BlockNode::reads);
+      if (!reads.empty()) {
+        body.push_back(ExprStmtDoc(TIR(p)->Attr("reads")->Call(AsExprDocArray(reads, p))));
+      }
+
+      auto writes = stmt.GetAttr(&tir::BlockNode::writes);
+      if (!writes.empty()) {
+        body.push_back(ExprStmtDoc(TIR(p)->Attr("writes")->Call(AsExprDocArray(writes, p))));
+      }
+
+      auto annotations = stmt.GetAttr(&tir::BlockNode::annotations);
+      if (!annotations.empty()) {
+        body.push_back(ExprStmtDoc(TIR(p)->Attr("block_attr")->Call({AsDictDoc(annotations, p)})));
+      }
+
+      auto alloc_buffers = stmt.GetAttr(&tir::BlockNode::alloc_buffers);
+      std::vector<TracedObject<tir::Buffer>> buffers_to_allocate(alloc_buffers.begin(),
+                                                                 alloc_buffers.end());
+      DefineBuffers(
+          buffers_to_allocate, {}, frame, p, TIR(p)->Attr("alloc_buffer"),
+          [&body](IdDoc buf, ExprDoc def) { body.push_back(AssignDoc(buf, def, NullOpt)); });
+
+      auto match_buffers = stmt.GetAttr(&tir::BlockNode::match_buffers);
+      for (auto match_buffer : match_buffers) {
+        auto buffer = match_buffer.GetAttr(&tir::MatchBufferRegionNode::buffer);
+        auto source = match_buffer.GetAttr(&tir::MatchBufferRegionNode::source);
+
+        DefineBuffers(
+            {buffer}, {p->AsExprDoc(source)}, frame, p, TIR(p)->Attr("match_buffer"),
+            [&body](IdDoc buf, ExprDoc def) { body.push_back(AssignDoc(buf, def, NullOpt)); });
+      }
+
+      auto init = stmt.GetAttr(&tir::BlockNode::init);
+      if (init.defined()) {
+        body.push_back(ScopeDoc(TIR(p)->Attr("init")->Call({}), AsStmtDocArray(init.value(), p)));
+      }
+
+      body = runtime::Concat(body, AsStmtDocArray(stmt.GetAttr(&tir::BlockNode::body), p));
+
+      return StmtBlockDoc(body);
+    });
+
+struct BlockVarBinding {
+  TracedObject<tir::IterVar> lhs;
+  TracedObject<PrimExpr> rhs;
+
+  BlockVarBinding(const TracedObject<tir::IterVar>& lhs, const TracedObject<PrimExpr>& rhs)
+      : lhs(lhs), rhs(rhs) {}
+};
+
+std::vector<std::vector<BlockVarBinding>> GetBlockVarGroups(
+    const TracedArray<tir::IterVar>& iter_vars, const TracedArray<PrimExpr>& values,
+    const Map<tir::Var, tir::For>& loop_var_map) {
+  ICHECK_EQ(iter_vars.size(), values.size());
+  ICHECK(iter_vars.size() > 0);
+
+  std::vector<std::vector<BlockVarBinding>> result;
+
+  tir::ExprDeepEqual expr_equal;
+  auto is_simple_remap = [&expr_equal, &loop_var_map](const tir::IterVar& iter_var,
+                                                      const PrimExpr& value) -> bool {
+    if (iter_var->iter_type != tir::kDataPar && iter_var->iter_type != tir::kCommReduce)
+      return false;
+    if (!value->IsInstance<tir::VarNode>()) {
+      return false;
+    }
+    const auto& var = Downcast<tir::Var>(value);
+    auto it = loop_var_map.find(var);
+    return it != loop_var_map.end() && expr_equal((*it).second->min, iter_var->dom->min) &&
+           expr_equal((*it).second->extent, iter_var->dom->extent);
+  };
+
+  bool last_is_simple_remap = true;
+  for (size_t i = 0; i < iter_vars.size(); i++) {
+    TracedObject<tir::IterVar> iter_var = iter_vars[i];
+    TracedObject<PrimExpr> value = values[i];
+    bool current_is_simple_remap = is_simple_remap(iter_var.Get(), value.Get());
+    if (!(current_is_simple_remap && last_is_simple_remap) || result.empty()) {
+      // Add new group if either:
+      // 1. The result vector is empty.
+      // 2. At least one of the current var and previous var is not simple remap
+      result.emplace_back();
+    }
+    result.back().emplace_back(iter_var, value);
+    last_is_simple_remap = current_is_simple_remap;
+  }
+
+  return result;
+}
+
+AssignDoc PrintBlockVar(const BlockVarBinding& block_var_binding, IRDocsifier p) {
+  const auto& iter_var = block_var_binding.lhs;
+  ExprDoc lhs = p->AsExprDoc(iter_var.GetAttr(&tir::IterVarNode::var));
+  ExprDoc rhs = IterVarBlockVar(iter_var, block_var_binding.rhs, p);
+  return AssignDoc(lhs, rhs, NullOpt);
+}
+
+AssignDoc PrintGroupedSimpleRemappingBlockVars(
+    const std::vector<BlockVarBinding>& block_var_bindings, IRDocsifier p) {
+  std::vector<ExprDoc> iter_var_ids;
+  std::vector<ExprDoc> iter_value_docs;
+  std::string iter_type_str;
+  Array<ObjectPath> iter_type_paths;
+
+  for (const BlockVarBinding& binding : block_var_bindings) {
+    const TracedObject<tir::IterVar>& iter_var = binding.lhs;
+    const TracedObject<PrimExpr>& iter_value = binding.rhs;
+
+    iter_var_ids.emplace_back(p->AsExprDoc(iter_var.GetAttr(&tir::IterVarNode::var)));
+
+    auto iter_type = iter_var.GetAttr(&tir::IterVarNode::iter_type);
+    if (iter_type.Get() == tir::kDataPar) {
+      iter_type_str += "S";
+    } else if (iter_type.Get() == tir::kCommReduce) {
+      iter_type_str += "R";
+    } else {
+      ICHECK(false);
+    }
+    iter_type_paths.push_back(iter_type.GetPath());
+    iter_value_docs.emplace_back(p->AsExprDoc(iter_value));
+  }
+
+  auto iter_type_doc = LiteralDoc::Str(iter_type_str);
+  iter_type_doc->source_paths = iter_type_paths;
+
+  ExprDoc lhs = TupleDoc(iter_var_ids);
+  ExprDoc rhs =
+      TIR(p)->Attr("axis")->Attr("remap")->Call({iter_type_doc, ListDoc(iter_value_docs)});
+
+  return AssignDoc(lhs, rhs, NullOpt);
+}
+
+Array<StmtDoc> PrintBlockVars(const TracedObject<tir::BlockRealize>& stmt, IRDocsifier p) {
+  auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+  auto iter_vars = block.GetAttr(&tir::BlockNode::iter_vars);
+  auto iter_values = stmt.GetAttr(&tir::BlockRealizeNode::iter_values);
+
+  Map<tir::Var, tir::For> loop_var_map = GetLoopVarMap(p);
+  Array<StmtDoc> result;
+  for (const std::vector<BlockVarBinding>& binding_group :
+       GetBlockVarGroups(iter_vars, iter_values, loop_var_map)) {
+    ICHECK_NE(binding_group.size(), 0);
+    if (binding_group.size() == 1) {
+      result.push_back(PrintBlockVar(binding_group[0], p));
+    } else {
+      result.push_back(PrintGroupedSimpleRemappingBlockVars(binding_group, p));
+    }
+  }
+  return result;
+}
+
+Array<StmtDoc> PrintBlockAttrs(const TracedObject<tir::BlockRealize>& stmt, IRDocsifier p) {
+  std::vector<ExprDoc> attr_exprs;
+  auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+  auto predicate = stmt.GetAttr(&tir::BlockRealizeNode::predicate);
+
+  if (!tir::is_one(predicate.Get())) {
+    attr_exprs.emplace_back(TIR(p)->Attr("where")->Call({p->AsExprDoc(predicate)}));
+  }
+
+  Array<StmtDoc> result;
+  for (const ExprDoc& attr : attr_exprs) {
+    result.push_back(ExprStmtDoc(attr));
+  }
+
+  return result;
+}
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::BlockRealize>([](TracedObject<tir::BlockRealize> stmt, IRDocsifier p) {
+      auto block = stmt.GetAttr(&tir::BlockRealizeNode::block);
+      auto block_name_hint = block.GetAttr(&tir::BlockNode::name_hint);
+
+      Array<ExprDoc> block_args;
+      if (!block_name_hint.Get().empty()) {
+        block_args.push_back(LiteralDoc::Str(block_name_hint));
+      }
+      ExprDoc block_begin_expr = TIR(p)->Attr("block")->Call(block_args);
+
+      TIRGeneralFrame frame;
+      WithCtx with_frame = p->WithFrame(frame);
+
+      for (auto iter_var : block.GetAttr(&tir::BlockNode::iter_vars)) {
+        auto var = iter_var.GetAttr(&tir::IterVarNode::var);
+        DefineVar(var, frame, p);
+      }
+
+      Array<StmtDoc> body = PrintBlockVars(stmt, p);
+      body = runtime::Concat(body, PrintBlockAttrs(stmt, p));
+      body = runtime::Concat(body, AsStmtDocArray(block, p));
+
+      return ScopeDoc(block_begin_expr, body);
     });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)

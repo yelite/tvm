@@ -133,10 +133,44 @@ ExprDoc IterVarDef(const TracedObject<tir::IterVar>& iter_var, const IRDocsifier
   return result;
 }
 
+static String GetBlockIterTypeStr(tir::IterVarType iter_type) {
+  switch (iter_type) {
+    case tir::kDataPar:
+      return "spatial";
+    case tir::kCommReduce:
+      return "reduce";
+    case tir::kOrdered:
+      return "scan";
+    case tir::kOpaque:
+      return "opaque";
+    default:
+      LOG(FATAL) << "Unknown block var iter type: " << iter_type;
+      throw;
+  }
+}
+
 // T.axis.S/R(...)
-ExprDoc IterVarBlockVar(const TracedObject<tir::IterVar>& iter_var, const IRDocsifier& p) {
-  // TODO(yelite): implement this in the PR for ForStmt
-  throw;
+ExprDoc IterVarBlockVar(const TracedObject<tir::IterVar>& iter_var,
+                        const TracedObject<PrimExpr>& value, const IRDocsifier& p) {
+  auto iter_type = iter_var.GetAttr(&tir::IterVarNode::iter_type);
+  auto iter_type_str = MakeTraced(GetBlockIterTypeStr(iter_type.Get()), iter_type.GetPath());
+
+  Array<ExprDoc> args;
+  auto dom = iter_var.GetAttr(&tir::IterVarNode::dom);
+  auto min = dom.GetAttr(&RangeNode::min);
+  auto extent = dom.GetAttr(&RangeNode::extent);
+
+  if (tir::is_zero(min.Get())) {
+    auto extent_doc = p->AsExprDoc(extent);
+    extent_doc->source_paths.push_back(min.GetPath());
+    args.push_back(extent_doc);
+  } else {
+    auto max = MakeTraced(min.Get() + extent.Get(), extent.GetPath());
+    args.push_back(TupleDoc({p->AsExprDoc(min), p->AsExprDoc(max)}));
+  }
+  args.push_back(p->AsExprDoc(value));
+
+  return TIR(p)->Attr("axis")->Attr(iter_type_str)->Call(args);
 }
 
 // T.launch_thread(...)

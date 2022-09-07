@@ -281,8 +281,8 @@ TracedObject<String> GetBufferNameHint(const TracedObject<tir::Buffer>& buf) {
 }
 
 std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& buffers,
-                                 const Frame& frame, const IRDocsifier& p,
-                                 const ExprDoc& definition_prefix,
+                                 const Array<ExprDoc>& extra_args, const Frame& frame,
+                                 const IRDocsifier& p, const ExprDoc& definition_prefix,
                                  std::function<void(IdDoc, ExprDoc)> add_definiton) {
   std::vector<IdDoc> result;
 
@@ -301,7 +301,7 @@ std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& b
     IdDoc buf_doc = p->vars->Define(buffer.Get(), name_hint, frame);
     result.push_back(buf_doc);
     ExprDoc buf_definition = buffer_print_info.AsCall(
-        definition_prefix,
+        definition_prefix, extra_args,
         [&p](const TracedObject<PrimExpr>& expr) -> ExprDoc { return p->AsDoc<ExprDoc>(expr); });
     add_definiton(buf_doc, buf_definition);
   }
@@ -323,7 +323,7 @@ ExprDoc PrintBuffer(TracedObject<tir::Buffer> buf, IRDocsifier p) {
       top_level_frame->free_var_definitions.push_back(
           AssignDoc(buf_indentifier, NullOpt, buf_definition));
     };
-    return DefineBuffers({buf}, top_level_frame, p, TIR(p)->Attr("Buffer"),
+    return DefineBuffers({buf}, {}, top_level_frame, p, TIR(p)->Attr("Buffer"),
                          add_free_buffer_definition)[0];
   }
 }

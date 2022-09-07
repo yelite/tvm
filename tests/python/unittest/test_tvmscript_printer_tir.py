@@ -30,6 +30,8 @@ from tvm.tir import (
     And,
     AssertStmt,
     AttrStmt,
+    Block,
+    BlockRealize,
     Broadcast,
     BufferLoad,
     BufferRealize,
@@ -50,6 +52,7 @@ from tvm.tir import (
     IterVar,
     Let,
     LetStmt,
+    MatchBufferRegion,
     Mul,
     Not,
     Or,
@@ -1065,5 +1068,125 @@ def test_for_nested_non_simple_loops_non_serial_for_kind():
         for j in T.vectorized(16):
             for k in T.serial(16):
                 i + j + k
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_block_simple():
+    node = Block([], [], [], "main", Evaluate(1))
+    expected = """
+    1
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_block_all_params():
+    i = IterVar(Range(1, 5), Var("i", "int32"), IterVar.DataPar)
+    j = IterVar(Range(1, 5), Var("j", "int32"), IterVar.DataPar)
+    a = decl_buffer((5, 10), name="a")
+    region_a = BufferRegion(a, [Range(0, 4), Range(0, 9)])
+    b = decl_buffer((5, 12), name="b")
+    region_b = BufferRegion(b, [Range(0, 2), Range(0, 7)])
+    c = decl_buffer((5, 12), name="c")
+    d = decl_buffer((4, 9), name="d")
+    e = decl_buffer((2, 2), name="e")
+    node = Block(
+        [i, j],
+        [region_a],
+        [region_b],
+        "main",
+        Evaluate(1),
+        init=Evaluate(2),
+        alloc_buffers=[c],
+        match_buffers=[
+            MatchBufferRegion(d, region_a),
+            MatchBufferRegion(e, BufferRegion(d, [Range(0, 2), Range(0, 2)])),
+        ],
+        annotations={"attr": StringImm("value")},
+    )
+    expected = """
+    i: T.int32
+    j: T.int32
+    a: T.Buffer(shape=(5, 10))
+    b: T.Buffer(shape=(5, 12))
+    T.iter_var(i, (1, 5), "DataPar", "")
+    T.iter_var(j, (1, 5), "DataPar", "")
+    T.reads(a[0:4, 0:9])
+    T.writes(b[0:2, 0:7])
+    T.block_attr({"attr": "value"})
+    c = T.alloc_buffer(shape=(5, 12))
+    d = T.match_buffer(a[0:4, 0:9], shape=(4, 9))
+    e = T.match_buffer(d[0:2, 0:2], shape=(2, 2))
+    with T.init():
+        2
+    1
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_block_realize_simple():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    v_i = IterVar(Range(1, 5), Var("v_i", "int32"), IterVar.DataPar)
+    v_j = IterVar(Range(3, 7), Var("v_j", "int32"), IterVar.DataPar)
+    block = Block([v_i, v_j], [], [], "main", Evaluate(1))
+    node = BlockRealize([i, j + 2], True, block)
+    expected = """
+    i: T.int32
+    j: T.int32
+    with T.block("main"):
+        v_i = T.axis.spatial((1, 5), i)
+        v_j = T.axis.spatial((3, 7), j + 2)
+        1
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_block_realize_with_predicate():
+    p = Var("p", "bool")
+    i = Var("i", "int32")
+    v_i = IterVar(Range(1, 5), Var("v_i", "int32"), IterVar.DataPar)
+    block = Block([v_i], [], [], "main", Evaluate(1))
+    node = BlockRealize([i], p, block)
+    expected = """
+    i: T.int32
+    p: T.bool
+    with T.block("main"):
+        v_i = T.axis.spatial((1, 5), i)
+        T.where(p)
+        1
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
+def test_block_realize_merged_simple_block_vars():
+    i = Var("i", "int32")
+    j = Var("j", "int32")
+    k = Var("k", "int32")
+    m = Var("m", "int32")
+    n = Var("n", "int32")
+
+    v_i = IterVar(Range(0, 16), Var("v_i", "int32"), IterVar.DimInfo)
+    v_j = IterVar(Range(0, 16), Var("v_j", "int32"), IterVar.DataPar)
+    v_k = IterVar(Range(0, 16), Var("v_k", "int32"), IterVar.CommReduce)
+    v_m = IterVar(Range(0, 16), Var("v_m", "int32"), IterVar.DataPar)
+    v_n = IterVar(Range(1, 17), Var("v_n", "int32"), IterVar.DataPar)
+    block = Block([v_i, v_j, v_k, v_m, v_n], [], [], "main", Evaluate(1))
+    block_realize = BlockRealize([i, j, k, m, n + 1], True, block)
+
+    loop5 = For(n, 0, 16, ForKind.SERIAL, block_realize)
+    loop4 = For(m, 0, 16, ForKind.SERIAL, loop5)
+    loop3 = For(k, 0, 16, ForKind.SERIAL, loop4)
+    loop2 = For(j, 0, 16, ForKind.SERIAL, loop3)
+    loop1 = For(i, 0, 16, ForKind.SERIAL, loop2)
+    node = loop1
+
+    expected = """
+    for i, j, k, m, n in T.grid(16, 16, 16, 16, 16):
+        with T.block("main"):
+            v_i = T.axis.opaque(16, i)
+            v_j, v_k, v_m = T.axis.remap("SRS", [j, k, m])
+            v_n = T.axis.spatial((1, 17), n + 1)
+            1
     """
     assert as_tir_script(node) == format_script(expected)

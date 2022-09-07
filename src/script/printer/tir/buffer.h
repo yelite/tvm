@@ -102,8 +102,8 @@ std::vector<TracedObject<tir::Buffer>> FindAliasingBuffers(tir::Var ptr_var,
                                                            TracedObject<tir::Stmt> body);
 
 std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& buffers,
-                                 const Frame& frame, const IRDocsifier& p,
-                                 const ExprDoc& definition_prefix,
+                                 const Array<ExprDoc>& extra_args, const Frame& frame,
+                                 const IRDocsifier& p, const ExprDoc& definition_prefix,
                                  std::function<void(IdDoc, ExprDoc)> add_definiton);
 
 }  // namespace printer

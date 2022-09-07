@@ -41,7 +41,8 @@ IdDoc DeclareVar(const TracedObject<tir::Var>& var, const Frame& frame, const IR
 // T.iter_var(...)
 ExprDoc IterVarDef(const TracedObject<tir::IterVar>& iter_var, const IRDocsifier& p);
 // T.axis.S/R(...)
-ExprDoc IterVarBlockVar(const TracedObject<tir::IterVar>& iter_var, const IRDocsifier& p);
+ExprDoc IterVarBlockVar(const TracedObject<tir::IterVar>& iter_var,
+                        const TracedObject<PrimExpr>& value, const IRDocsifier& p);
 // T.launch_thread(...)
 ExprDoc IterVarLaunchThread(const TracedObject<tir::IterVar>& iter_var,
                             const TracedObject<PrimExpr>& value, const Frame& frame,
