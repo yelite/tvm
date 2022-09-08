@@ -105,6 +105,19 @@ class TIRLoopFrame : public TIRFrame {
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRLoopFrame, TIRFrame, TIRLoopFrameNode);
 };
 
+class TIRPrimFuncFrameNode : public TIRFrameNode {
+ public:
+  static constexpr const char* _type_key = "script.printer.TIRPrimFuncFrame";
+  TVM_DECLARE_FINAL_OBJECT_INFO(TIRPrimFuncFrameNode, TIRFrameNode);
+};
+
+class TIRPrimFuncFrame : public TIRFrame {
+ public:
+  TIRPrimFuncFrame();
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(TIRPrimFuncFrame, TIRFrame,
+                                                    TIRPrimFuncFrameNode);
+};
+
 inline IdDoc TIR(const IRDocsifier& p) { return IdDoc(p->ir_prefix.Get("tir").value_or("T")); }
 
 ExprDoc PrintOpCall(TracedObject<tir::Call> call, IRDocsifier p);
@@ -115,6 +128,8 @@ void PostOrderVisitExprTraced(const TracedObject<PrimExpr>& expr,
 void PostOrderVisitStmtExprTraced(
     const TracedObject<tir::Stmt>& expr,
     const std::function<void(const TracedObject<ObjectRef>&)>& callback);
+
+Array<StmtDoc> AsStmtDocArray(const TracedObject<tir::Stmt>& obj, IRDocsifier p);
 
 }  // namespace printer
 }  // namespace script

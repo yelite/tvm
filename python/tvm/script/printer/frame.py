@@ -19,9 +19,10 @@ Frame is the core data structure for semantic information when printing
 IR graph into TVMScript code.
 """
 
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
 from tvm._ffi import register_object
+from tvm.ir import GlobalVar, BaseFunc
 from tvm.runtime import Object
 from tvm.script.printer.doc import StmtDoc
 
@@ -79,3 +80,15 @@ class VarDefFrame(Frame):
 
     def __init__(self):
         self.__init_handle_by_constructor__(_ffi_api.VarDefFrame)  # type: ignore # pylint: disable=no-member
+
+
+@register_object("script.printer.IRModuleFrame")
+class IRModuleFrame(Frame):
+    """
+    IRModuleFrame contains information about the IRModule that's being printed.
+    """
+
+    stmts: Mapping[BaseFunc, GlobalVar]
+
+    def __init__(self):
+        self.__init_handle_by_constructor__(_ffi_api.IRModuleFrame)  # type: ignore # pylint: disable=no-member

@@ -40,6 +40,8 @@ TIRLoopFrame::TIRLoopFrame(tir::For for_stmt) : TIRFrame(make_object<TIRLoopFram
   this->get()->loops.push_back(for_stmt);
 }
 
+TIRPrimFuncFrame::TIRPrimFuncFrame() : TIRFrame(make_object<TIRPrimFuncFrameNode>()) {}
+
 void PostOrderVisitExprTraced(const TracedObject<PrimExpr>& expr,
                               const std::function<void(const TracedObject<PrimExpr>&)>& callback) {
   PostOrderVisitTraced(
@@ -56,6 +58,55 @@ void PostOrderVisitStmtExprTraced(
         return object->IsInstance<PrimExprNode>() || object->IsInstance<tir::StmtNode>();
       },
       [&](const TracedObject<ObjectRef>& object) { callback(object); });
+}
+
+static std::vector<TracedObject<tir::Stmt>> FlattenSeqStmt(const TracedObject<tir::Stmt>& stmt) {
+  std::vector<TracedObject<tir::Stmt>> result;
+
+  if (stmt.IsInstance<tir::SeqStmt>()) {
+    auto seq = stmt.Downcast<tir::SeqStmt>().GetAttr(&tir::SeqStmtNode::seq);
+    for (const TracedObject<tir::Stmt>& child : seq) {
+      std::vector<TracedObject<tir::Stmt>> flattened_child = FlattenSeqStmt(child);
+      result.insert(result.end(), flattened_child.begin(), flattened_child.end());
+    }
+  } else {
+    result.push_back(stmt);
+  }
+
+  return result;
+}
+
+static Array<StmtDoc> FlattenStmtDoc(const Doc& doc) {
+  if (const auto* stmt_block = doc.as<StmtBlockDocNode>()) {
+    return stmt_block->stmts;
+  } else if (const auto* stmt_doc = doc.as<StmtDocNode>()) {
+    return {GetRef<StmtDoc>(stmt_doc)};
+  } else {
+    LOG(FATAL) << "Expect to get StmtBlockDoc or StmtDoc, got " << doc->GetTypeKey();
+    throw;
+  }
+}
+
+Array<StmtDoc> AsStmtDocArray(const TracedObject<tir::Stmt>& obj, IRDocsifier p) {
+  Array<StmtDoc> result;
+  std::vector<TracedObject<tir::Stmt>> flattened_stmts = FlattenSeqStmt(obj);
+
+  const auto* frame_node = p->frames.back().as<TIRFrameNode>();
+  ICHECK_NOTNULL(frame_node);
+
+  size_t stmt_count = flattened_stmts.size();
+
+  const bool original_concise_scoping_status = frame_node->allow_concise_scoping;
+  frame_node->allow_concise_scoping = false;
+  for (size_t i = 0; i < stmt_count; i++) {
+    if (i == stmt_count - 1) {
+      frame_node->allow_concise_scoping = true;
+    }
+    result = runtime::Concat(result, FlattenStmtDoc(p->AsDoc<Doc>(flattened_stmts[i])));
+  }
+  frame_node->allow_concise_scoping = original_concise_scoping_status;
+
+  return result;
 }
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
@@ -90,6 +141,11 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
 
       return StmtBlockDoc(doc_to_print);
     });
+
+TVM_REGISTER_NODE_TYPE(TIRTopLevelFrameNode);
+TVM_REGISTER_NODE_TYPE(TIRGeneralFrameNode);
+TVM_REGISTER_NODE_TYPE(TIRLoopFrameNode);
+TVM_REGISTER_NODE_TYPE(TIRPrimFuncFrameNode);
 }  // namespace printer
 }  // namespace script
 }  // namespace tvm

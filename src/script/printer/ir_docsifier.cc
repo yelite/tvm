@@ -16,12 +16,15 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include <tvm/ir/module.h>
 #include <tvm/runtime/container/base.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/runtime/registry.h>
 #include <tvm/script/printer/ir_docsifier.h>
 #include <tvm/script/printer/traced_object.h>
 #include <tvm/script/printer/traced_object_functor.h>
+
+#include "tvm/script/printer/frame.h"
 
 namespace tvm {
 namespace script {
@@ -66,6 +69,26 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
       ICHECK_NE(top_dispatch_token, "");
       ICHECK(false) << "Printing IR " << top_dispatch_token << " is not implemented.";
       throw;
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<String>([](TracedObject<String> obj, IRDocsifier p) -> Doc {
+      return LiteralDoc::Str(obj);
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<IRModule>([](TracedObject<IRModule> obj, IRDocsifier p) -> Doc {
+      ExprDoc decorator = IdDoc("tvm")->Attr("script")->Attr("ir_module");
+      IRModuleFrame frame;
+      auto with_ctx = p->WithFrame(frame);
+
+      Array<StmtDoc> body;
+      for (const auto& entry : obj.GetAttr(&IRModuleNode::functions)) {
+        frame->function_names.Set(entry.second.Get(), entry.first);
+        body.push_back(p->AsDoc<StmtDoc>(entry.second));
+      }
+
+      return ClassDoc(IdDoc("Module"), {decorator}, body);
     });
 
 TVM_REGISTER_NODE_TYPE(IRDocsifierNode);

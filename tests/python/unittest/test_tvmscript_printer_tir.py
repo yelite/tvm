@@ -16,7 +16,9 @@
 # under the License.
 import pytest
 
+import tvm
 from tvm.ir import GlobalVar, PointerType, PrimType, Range, TupleType
+from tvm.script import tir as T
 from tvm.script.printer import script
 from tvm.tir import (
     EQ,
@@ -1190,3 +1192,81 @@ def test_block_realize_merged_simple_block_vars():
             1
     """
     assert as_tir_script(node) == format_script(expected)
+
+
+def test_function_basic():
+    @T.prim_func
+    def f(a: T.handle) -> None:
+        A = T.match_buffer(a, [128, 128], elem_offset=1)
+        A[0, 1] = 1
+
+    expected = """
+    @T.prim_func
+    def main(a: T.handle) -> None:
+        A = T.match_buffer(a, shape=(128, 128), elem_offset=1)
+        A[0, 1] = 1
+    """
+    assert as_tir_script(f) == format_script(expected)
+
+
+def test_function_simple_buffer():
+    @T.prim_func
+    def f(a: T.handle) -> None:
+        A = T.match_buffer(a, [128, 128])
+        A[0, 1] = 1
+
+    expected = """
+    @T.prim_func
+    def main(A: T.Buffer(shape=(128, 128))) -> None:
+        A[0, 1] = 1
+    """
+    assert as_tir_script(f) == format_script(expected)
+
+
+def test_function_all_params():
+    @T.prim_func
+    def f(a: T.handle, b: T.int32, c: T.handle) -> None:
+        T.func_attr({"global_symbol": "test_func", "tir.noalias": True})
+        m = T.var("int32")
+        A = T.match_buffer(a, [128, 128])
+        C = T.match_buffer(c, [4, m], elem_offset=16)
+        T.preflattened_buffer(C, (2, 4, 2), data=C.data)
+        A[0, 1] = 1
+
+    expected = """
+    @T.prim_func
+    def test_func(A: T.Buffer(shape=(128, 128)), b: T.int32, c: T.handle) -> None:
+        T.func_attr({"global_symbol": "test_func", "tir.noalias": True})
+        m = T.var("int32")
+        C = T.match_buffer(c, shape=(4, m), elem_offset=16)
+        T.preflattened_buffer(C, shape=(2, 4, 2), data=C.data)
+        A[0, 1] = 1
+    """
+    assert as_tir_script(f) == format_script(expected)
+
+
+def test_function_in_ir_module():
+    @tvm.script.ir_module
+    class Module:
+        @T.prim_func
+        def f1(a: T.handle) -> None:
+            A = T.match_buffer(a, [128, 128])
+            A[0, 1] = 1
+
+        @T.prim_func
+        def f2(b: T.handle) -> None:
+            B = T.match_buffer(b, [128, 128])
+            B[0, 1] = 1
+
+    expected = """
+    @tvm.script.ir_module
+    class Module:
+        @T.prim_func
+        def f2(B: T.Buffer(shape=(128, 128))) -> None:
+            B[0, 1] = 1
+
+        @T.prim_func
+        def f1(A: T.Buffer(shape=(128, 128))) -> None:
+            A[0, 1] = 1
+    """
+    assert as_tir_script(Module) == format_script(expected)

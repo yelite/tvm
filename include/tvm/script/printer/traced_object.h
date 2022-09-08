@@ -251,6 +251,11 @@ class TracedMap {
   iterator end() const { return iterator(map_.end(), path_); }
 
   /*!
+   * \brief Find the key and returns the associated iterator.
+   */
+  iterator find(const K& key) const { return iterator(map_.find(key), path_); }
+
+  /*!
    * \brief Returns true iff the wrapped map is empty.
    */
   bool empty() const { return map_.empty(); }

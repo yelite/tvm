@@ -877,7 +877,6 @@ def get_func_doc_for_class(name):
                 def f1(x: int, y: int = 1) -> None:
                     y = x + 1
                     y = y - 1
-
             """,
         ),
         (
@@ -895,7 +894,6 @@ def get_func_doc_for_class(name):
                 def f2(x: int, y: int = 1) -> None:
                     y = x + 1
                     y = y - 1
-
             """,
         ),
     ],

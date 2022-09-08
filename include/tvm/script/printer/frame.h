@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include "tvm/ir/function.h"
+
 namespace tvm {
 namespace script {
 namespace printer {
@@ -131,6 +133,31 @@ class VarDefFrame : public Frame {
  public:
   VarDefFrame();
   TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(VarDefFrame, Frame, VarDefFrameNode);
+};
+
+/*!
+ * \brief IRModuleFrame contains information about the IRModule that's being printed.
+ */
+class IRModuleFrameNode : public FrameNode {
+ public:
+  Map<BaseFunc, GlobalVar> function_names;
+
+  void VisitAttrs(tvm::AttrVisitor* v) {
+    FrameNode::VisitAttrs(v);
+    v->Visit("function_names", &function_names);
+  }
+
+  static constexpr const char* _type_key = "script.printer.IRModuleFrame";
+  TVM_DECLARE_FINAL_OBJECT_INFO(IRModuleFrameNode, FrameNode);
+};
+
+/*!
+ * \brief Reference type of IRModuleFrameNode
+ */
+class IRModuleFrame : public Frame {
+ public:
+  IRModuleFrame();
+  TVM_DEFINE_MUTABLE_NOTNULLABLE_OBJECT_REF_METHODS(IRModuleFrame, Frame, IRModuleFrameNode);
 };
 
 }  // namespace printer

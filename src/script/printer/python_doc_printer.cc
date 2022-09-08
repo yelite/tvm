@@ -185,11 +185,16 @@ class PythonDocPrinter : public DocPrinter {
     }
   }
 
-  void PrintIndentedBlock(const Array<StmtDoc>& docs) {
+  void PrintIndentedBlock(const Array<StmtDoc>& docs, bool new_line_between_items = false) {
     IncreaseIndent();
+    bool is_first = true;
     for (const StmtDoc& d : docs) {
+      if (new_line_between_items && !is_first) {
+        NewLineWithoutIndent();
+      }
       NewLine();
       PrintDoc(d);
+      is_first = false;
     }
     if (docs.empty()) {
       NewLine();
@@ -615,7 +620,6 @@ void PythonDocPrinter::PrintTypedDoc(const FunctionDoc& doc) {
     PrintBlockComment(doc->comment.value());
   }
   PrintIndentedBlock(doc->body);
-  NewLineWithoutIndent();
 }
 
 void PythonDocPrinter::PrintTypedDoc(const ClassDoc& doc) {
@@ -628,8 +632,7 @@ void PythonDocPrinter::PrintTypedDoc(const ClassDoc& doc) {
   if (doc->comment.defined()) {
     PrintBlockComment(doc->comment.value());
   }
-  PrintIndentedBlock(doc->body);
-  NewLineWithoutIndent();
+  PrintIndentedBlock(doc->body, /*new_line_between_items*/ true);
 }
 
 String DocToPythonScript(Doc doc, int indent_spaces, bool print_line_numbers, int num_context_lines,

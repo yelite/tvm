@@ -27,6 +27,8 @@ MetadataFrame::MetadataFrame() : MetadataFrame(make_object<MetadataFrameNode>())
 
 VarDefFrame::VarDefFrame() : VarDefFrame(make_object<VarDefFrameNode>()) {}
 
+IRModuleFrame::IRModuleFrame() : IRModuleFrame(make_object<IRModuleFrameNode>()) {}
+
 TVM_REGISTER_NODE_TYPE(FrameNode);
 TVM_REGISTER_GLOBAL("script.printer.FrameAddExitCallback")
     .set_body_typed([](Frame frame, runtime::TypedPackedFunc<void()> callback) {
@@ -44,6 +46,11 @@ TVM_REGISTER_GLOBAL("script.printer.MetadataFrame").set_body_typed([]() {
 
 TVM_REGISTER_NODE_TYPE(VarDefFrameNode);
 TVM_REGISTER_GLOBAL("script.printer.VarDefFrame").set_body_typed([]() { return VarDefFrame(); });
+
+TVM_REGISTER_NODE_TYPE(IRModuleFrameNode);
+TVM_REGISTER_GLOBAL("script.printer.IRModuleFrame").set_body_typed([]() {
+  return IRModuleFrame();
+});
 
 }  // namespace printer
 }  // namespace script
