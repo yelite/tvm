@@ -161,8 +161,14 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::IfThenElse>([](TracedObject<tir::IfThenElse> stmt, IRDocsifier p) {
       ExprDoc predicate = p->AsExprDoc(stmt.GetAttr(&tir::IfThenElseNode::condition));
-      Array<StmtDoc> then_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::then_case), p);
-      Array<StmtDoc> else_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::else_case), p);
+      Array<StmtDoc> then_branch;
+      Array<StmtDoc> else_branch;
+      if (stmt.Get()->then_case.defined()) {
+        then_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::then_case), p);
+      }
+      if (stmt.Get()->else_case.defined()) {
+        else_branch = AsStmtDocArray(stmt.GetAttr(&tir::IfThenElseNode::else_case), p);
+      }
       return IfDoc(predicate, then_branch, else_branch);
     });
 

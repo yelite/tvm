@@ -787,6 +787,15 @@ def test_if_then_else():
     assert as_tir_script(node) == format_script(expected)
 
 
+def test_if_then_else_empty_else():
+    node = IfThenElse(1, Evaluate(2), None)
+    expected = """
+    if 1:
+        2
+    """
+    assert as_tir_script(node) == format_script(expected)
+
+
 def test_if_then_else_free_var():
     var = Var("a", "int32")
     node = IfThenElse(1, Evaluate(var), Evaluate(var + 1))

@@ -258,7 +258,9 @@ class IRModule(Node):
     def __repr__(self):
         return self.astext()
 
-    def script(self, tir_prefix: str = "T", show_meta: bool = False) -> str:
+    def script(
+        self, tir_prefix: str = "T", show_meta: bool = False, use_legacy_printer: bool = True
+    ) -> str:
         """Print IRModule into TVMScript
 
         Parameters
@@ -269,14 +271,23 @@ class IRModule(Node):
         show_meta : bool
             Whether to show meta information
 
+        use_legacy_printer : bool
+            If True, use the legacy printer at src/printer/tvmscript_printer.cc.
+            If False, use the TVMScript unified printer at src/script/printer.cc.
+
         Returns
         -------
         script : str
             The TVM Script of the IRModule
         """
-        return tvm._ffi.get_global_func("script.AsTVMScript")(
-            self, tir_prefix, show_meta
-        )  # type: ignore
+        # Import lazily to avoid circular import
+        from tvm.script.printer import script  # pylint: disable=import-outside-toplevel
+
+        if use_legacy_printer:
+            return tvm._ffi.get_global_func("script.AsTVMScript")(
+                self, tir_prefix, show_meta
+            )  # type: ignore
+        return script(self, "tir", {"tir": tir_prefix})
 
     def show(self, style: Optional[str] = None) -> None:
         """

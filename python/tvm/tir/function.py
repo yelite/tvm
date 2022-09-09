@@ -18,16 +18,17 @@
 
 import collections
 import inspect
-from typing import Callable, List, Mapping, Optional, Union, Tuple
+from typing import Callable, List, Mapping, Optional, Tuple, Union
 
 import tvm
 import tvm._ffi
 import tvm.runtime
-from tvm.runtime import Object
 from tvm.ir import BaseFunc, Range
-from .buffer import Buffer
-from .expr import Var, PrimExpr
+from tvm.runtime import Object
+
 from . import _ffi_api
+from .buffer import Buffer
+from .expr import PrimExpr, Var
 
 
 @tvm._ffi.register_object("tir.PrimFunc")
@@ -175,8 +176,10 @@ class PrimFunc(BaseFunc):
         """
         return _ffi_api.Specialize(self, param_map)  # type: ignore
 
-    def script(self, tir_prefix: str = "T", show_meta: bool = False) -> str:
-        """Print IRModule into TVMScript
+    def script(
+        self, tir_prefix: str = "T", show_meta: bool = False, use_legacy_printer: bool = True
+    ) -> str:
+        """Print PrimFunc into TVMScript
 
         Parameters
         ----------
@@ -186,14 +189,23 @@ class PrimFunc(BaseFunc):
         show_meta : bool
             Whether to show meta information
 
+        use_legacy_printer : bool
+            If True, use the legacy printer at src/printer/tvmscript_printer.cc.
+            If False, use the TVMScript unified printer at src/script/printer.cc.
+
         Returns
         -------
         script : str
             The TVM Script of the PrimFunc
         """
-        return tvm._ffi.get_global_func("script.AsTVMScript")(
-            self, tir_prefix, show_meta
-        )  # type: ignore
+        # Import lazily to avoid circular import
+        from tvm.script.printer import script  # pylint: disable=import-outside-toplevel
+
+        if use_legacy_printer:
+            return tvm._ffi.get_global_func("script.AsTVMScript")(
+                self, tir_prefix, show_meta
+            )  # type: ignore
+        return script(self, "tir", {"tir": tir_prefix})
 
     def show(self, style: Optional[str] = None) -> None:
         """

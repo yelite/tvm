@@ -26,6 +26,13 @@ from tvm.script import tir as T
 import numpy as np
 
 
+use_legacy_printer = tvm.testing.parameter(
+        True,
+        False,
+        ids=["legacy-printer", "unified-printer"]
+)
+
+
 def opt_gemm_normalize():
     @tvm.script.ir_module
     class Module:
@@ -2589,9 +2596,10 @@ def test_module_define():
     tvm.ir.assert_structural_equal(mod1, mod2)
 
 
-def test_matmul_original():
+def test_matmul_original(use_legacy_printer):
     func = matmul_original()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body.block, tir.stmt.Block)
@@ -2603,9 +2611,10 @@ def test_matmul_original():
     assert isinstance(rt_func.body.block.body.body.body[1].body.block, tir.stmt.Block)
 
 
-def test_element_wise():
+def test_element_wise(use_legacy_printer):
     func = element_wise()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body.block, tir.stmt.Block)
@@ -2619,9 +2628,10 @@ def test_element_wise():
     assert isinstance(rt_func.body.block.body[1].body.body.block, tir.stmt.Block)
 
 
-def test_predicate():
+def test_predicate(use_legacy_printer):
     func = predicate()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body.block, tir.stmt.Block)
@@ -2646,9 +2656,10 @@ def for_thread_binding():
     return for_thread_binding
 
 
-def test_for_thread_binding():
+def test_for_thread_binding(use_legacy_printer):
     func = for_thread_binding()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body, tir.stmt.For)
@@ -2680,9 +2691,10 @@ def match_buffer_region():
     return match_buffer_region
 
 
-def test_match_buffer_region():
+def test_match_buffer_region(use_legacy_printer):
     func = match_buffer_region()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body, tir.stmt.BlockRealize)
@@ -2725,9 +2737,10 @@ def block_elements():
     return block_elements
 
 
-def test_block_elements():
+def test_block_elements(use_legacy_printer):
     func = block_elements()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     assert isinstance(rt_func.body.block, tir.stmt.Block)
@@ -2761,9 +2774,10 @@ def opaque_block():
     return opaque_block
 
 
-def test_opaque_block():
+def test_opaque_block(use_legacy_printer):
     func = opaque_block()
-    rt_func = tvm.script.from_source(func.script(show_meta=True))
+    rt_func = tvm.script.from_source(func.script(show_meta=True,
+                                                 use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func)
 
     root_block = rt_func.body.block
@@ -2943,9 +2957,9 @@ def var_with_same_name():
     return var_with_same_name
 
 
-def test_same_name_var():
+def test_same_name_var(use_legacy_printer):
     func = var_with_same_name()
-    out_str = func.script(tir_prefix="T", show_meta=True)
+    out_str = func.script(tir_prefix="T", show_meta=True, use_legacy_printer=use_legacy_printer)
     rt_func = tvm.script.from_source(out_str)
     tvm.ir.assert_structural_equal(func, rt_func)
 
@@ -3067,9 +3081,9 @@ def func_div_mod():
     return func_div_mod
 
 
-def test_div_mod():
+def test_div_mod(use_legacy_printer):
     func = func_div_mod()
-    rt_func = tvm.script.from_source(func.script())
+    rt_func = tvm.script.from_source(func.script(use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func, True)
 
     assert isinstance(func.body[0].value, tvm.tir.FloorDiv)
@@ -3436,9 +3450,10 @@ ir_generator = tvm.testing.parameter(
 )
 
 
-def test_roundtrip(ir_generator):
+def test_roundtrip(ir_generator, use_legacy_printer):
     original = ir_generator()
-    after_roundtrip = tvm.script.from_source(original.script(show_meta=True))
+    script_str = original.script(show_meta=True, use_legacy_printer=use_legacy_printer)
+    after_roundtrip = tvm.script.from_source(script_str)
     tvm.ir.assert_structural_equal(original, after_roundtrip, True)
 
 
