@@ -96,9 +96,9 @@ Doc PrintPrimFunc(TracedObject<tir::PrimFunc> func, IRDocsifier p) {
     int n = buffers.size();
     for (int i = 0; i < n; ++i) {
       const BufferPrintInfo& info = buffer_infos[i];
-      if (info.data.defined() || info.strides.defined() || info.elem_offset.defined() ||
-          info.scope.defined() || info.align.defined() || info.offset_factor.defined() ||
-          info.buffer_type.defined()) {
+      if (info.data.defined() || !info.axis_separators.empty() || !info.strides.empty() ||
+          info.elem_offset.defined() || info.scope.defined() || info.align.defined() ||
+          info.offset_factor.defined() || info.buffer_type.defined()) {
         match_buffer_vars.push_back(buffer_vars[i]);
         match_buffer_info.push_back(info);
       } else {
@@ -121,7 +121,8 @@ Doc PrintPrimFunc(TracedObject<tir::PrimFunc> func, IRDocsifier p) {
           p->vars->Define(info.buffer.Get(), info.buffer.GetAttr(&tir::BufferNode::name), frame);
       ExprDoc type = info.AsCall(
           TIR(p)->Attr("Buffer"),
-          [&p](const TracedObject<PrimExpr>& e) -> ExprDoc { return p->AsDoc<ExprDoc>(e); });
+          [&p](const TracedObject<PrimExpr>& e) -> ExprDoc { return p->AsDoc<ExprDoc>(e); },
+          BufferShapePrintStyle::kFirstArgAsTuple);
       args.push_back(AssignDoc(lhs, NullOpt, type));
       p->vars->DefineByDoc(
           info.buffer.Get()->data, [lhs]() { return lhs->Attr("data"); }, frame);

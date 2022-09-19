@@ -74,12 +74,19 @@ class BufferAssociatedVariables {
   std::unordered_map<const tir::VarNode*, tir::Buffer> var2buffer_;
 };
 
+enum class BufferShapePrintStyle {
+  kKeywordArg = 0,
+  kFirstArgAsList = 1,
+  kFirstArgAsTuple = 2,
+};
+
 struct BufferPrintInfo {
   TracedObject<tir::Buffer> buffer;
   TracedArray<PrimExpr> shape;
   Optional<ExprDoc> dtype;
   TracedOptional<tir::Var> data;
-  TracedOptional<Array<PrimExpr>> strides;
+  TracedArray<IntImm> axis_separators;
+  TracedArray<PrimExpr> strides;
   TracedOptional<PrimExpr> elem_offset;
   Optional<ExprDoc> scope;
   Optional<ExprDoc> align;
@@ -87,9 +94,11 @@ struct BufferPrintInfo {
   Optional<ExprDoc> buffer_type;
 
   ExprDoc AsCall(const ExprDoc& prefix,
-                 std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const;
+                 std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter,
+                 BufferShapePrintStyle shape_style = BufferShapePrintStyle::kKeywordArg) const;
   ExprDoc AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
-                 std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const;
+                 std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter,
+                 BufferShapePrintStyle shape_style = BufferShapePrintStyle::kKeywordArg) const;
 };
 
 std::vector<BufferPrintInfo> GetBufferPrintInfo(
@@ -101,10 +110,11 @@ std::vector<BufferPrintInfo> GetBufferPrintInfo(
 std::vector<TracedObject<tir::Buffer>> FindAliasingBuffers(tir::Var ptr_var,
                                                            TracedObject<tir::Stmt> body);
 
-std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& buffers,
-                                 const Array<ExprDoc>& extra_args, const Frame& frame,
-                                 const IRDocsifier& p, const ExprDoc& definition_prefix,
-                                 std::function<void(IdDoc, ExprDoc)> add_definiton);
+std::vector<IdDoc> DefineBuffers(
+    const std::vector<TracedObject<tir::Buffer>>& buffers, const Array<ExprDoc>& extra_args,
+    const Frame& frame, const IRDocsifier& p, const ExprDoc& definition_prefix,
+    std::function<void(IdDoc, ExprDoc)> add_definiton,
+    BufferShapePrintStyle shape_style = BufferShapePrintStyle::kKeywordArg);
 
 }  // namespace printer
 }  // namespace script

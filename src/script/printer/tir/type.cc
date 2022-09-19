@@ -38,6 +38,11 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<PrimType>("tir", [](TracedObject<PrimType> ty, IRDocsifier p) -> Doc {
       TracedBasicValue<DataType> dtype = ty.GetAttr(&PrimTypeNode::dtype);
       String ty_str = runtime::DLDataType2String(dtype.Get());
+      if (dtype.Get().is_void()) {
+        // DLDataType2String returns empty string for void type, which isn't supposed 
+        // to be outputed by printer.
+        ty_str = "void";
+      }
       return TIR(p)->Attr(MakeTraced(ty_str, ty.GetPath()));
     });
 

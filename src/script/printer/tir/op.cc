@@ -82,6 +82,7 @@ TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("nextafter");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("hypot");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("copysign");
 TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("ldexp");
+TVM_SCRIPT_TIR_OP_SUGAR_DEFAULT("assume");
 
 }  // namespace printer
 }  // namespace script

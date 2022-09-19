@@ -3083,6 +3083,8 @@ def func_div_mod():
 
 def test_div_mod(use_legacy_printer):
     func = func_div_mod()
+    print(func.script(use_legacy_printer=use_legacy_printer))
+    print(func.script())
     rt_func = tvm.script.from_source(func.script(use_legacy_printer=use_legacy_printer))
     tvm.ir.assert_structural_equal(func, rt_func, True)
 
@@ -3453,6 +3455,8 @@ ir_generator = tvm.testing.parameter(
 def test_roundtrip(ir_generator, use_legacy_printer):
     original = ir_generator()
     script_str = original.script(show_meta=True, use_legacy_printer=use_legacy_printer)
+    print(script_str)
+    print(original.script())
     after_roundtrip = tvm.script.from_source(script_str)
     tvm.ir.assert_structural_equal(original, after_roundtrip, True)
 

@@ -23,6 +23,7 @@
 #include <tvm/script/printer/traced_object.h>
 #include <tvm/script/printer/traced_object_functor.h>
 #include <tvm/tir/analysis.h>
+#include <tvm/tir/builtin.h>
 #include <tvm/tir/op.h>
 #include <tvm/tir/stmt.h>
 
@@ -533,7 +534,8 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
                                                                  alloc_buffers.end());
       DefineBuffers(
           buffers_to_allocate, {}, frame, p, TIR(p)->Attr("alloc_buffer"),
-          [&body](IdDoc buf, ExprDoc def) { body.push_back(AssignDoc(buf, def, NullOpt)); });
+          [&body](IdDoc buf, ExprDoc def) { body.push_back(AssignDoc(buf, def, NullOpt)); },
+          BufferShapePrintStyle::kFirstArgAsList);
 
       auto match_buffers = stmt.GetAttr(&tir::BlockNode::match_buffers);
       for (auto match_buffer : match_buffers) {
@@ -567,7 +569,6 @@ std::vector<std::vector<BlockVarBinding>> GetBlockVarGroups(
     const TracedArray<tir::IterVar>& iter_vars, const TracedArray<PrimExpr>& values,
     const Map<tir::Var, tir::For>& loop_var_map) {
   ICHECK_EQ(iter_vars.size(), values.size());
-  ICHECK(iter_vars.size() > 0);
 
   std::vector<std::vector<BlockVarBinding>> result;
 
@@ -709,7 +710,15 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::Evaluate>([](TracedObject<tir::Evaluate> stmt, IRDocsifier p) {
-      return ExprStmtDoc(p->AsExprDoc(stmt.GetAttr(&tir::EvaluateNode::value)));
+      auto value = stmt.GetAttr(&tir::EvaluateNode::value);
+
+      if (value.IsInstance<tir::Call>()) {
+        auto call = value.Downcast<tir::Call>();
+        if (call.Get()->op.same_as(tir::builtin::assume())) {
+          return ExprStmtDoc(p->AsExprDoc(value));
+        }
+      }
+      return ExprStmtDoc(TIR(p)->Attr("evaluate")->Call({p->AsExprDoc(value)}));
     });
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)

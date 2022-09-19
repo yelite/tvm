@@ -99,6 +99,27 @@ TVM_SCRIPT_PRINTER_SET_TIR_BINARY_OP(tir::And, OpKind::kAnd);
 TVM_SCRIPT_PRINTER_SET_TIR_BINARY_OP(tir::Or, OpKind::kOr);
 
 TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::Mod>([](TracedObject<tir::Mod> e, IRDocsifier p) {
+      auto a = e.GetAttr(&tir::ModNode::a);
+      auto b = e.GetAttr(&tir::ModNode::b);
+      return TIR(p)->Attr("truncmod")->Call({p->AsExprDoc(a), p->AsExprDoc(b)});
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::Min>([](TracedObject<tir::Min> e, IRDocsifier p) {
+      auto a = e.GetAttr(&tir::MinNode::a);
+      auto b = e.GetAttr(&tir::MinNode::b);
+      return TIR(p)->Attr("min")->Call({p->AsExprDoc(a), p->AsExprDoc(b)});
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
+    .set_dispatch<tir::Max>([](TracedObject<tir::Max> e, IRDocsifier p) {
+      auto a = e.GetAttr(&tir::MaxNode::a);
+      auto b = e.GetAttr(&tir::MaxNode::b);
+      return TIR(p)->Attr("max")->Call({p->AsExprDoc(a), p->AsExprDoc(b)});
+    });
+
+TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
     .set_dispatch<tir::Not>([](TracedObject<tir::Not> e, IRDocsifier p) {
       return OperationDoc(OpKind::kNot, {p->AsExprDoc(e.GetAttr(&tir::NotNode::a))});
     });

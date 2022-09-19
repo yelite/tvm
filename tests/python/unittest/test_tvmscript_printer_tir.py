@@ -55,6 +55,9 @@ from tvm.tir import (
     Let,
     LetStmt,
     MatchBufferRegion,
+    Max,
+    Min,
+    Mod,
     Mul,
     Not,
     Or,
@@ -245,8 +248,8 @@ def test_buffer_free_buffer_aliasing():
     p: T.Ptr(T.int16)
     buffer_a: T.Buffer("int8", shape=(4, 10), data=p)
     buffer_b: T.Buffer("int4", shape=(8, 5), data=p)
-    buffer_a[0, 0]
-    buffer_b[0, 1]
+    T.evaluate(buffer_a[0, 0])
+    T.evaluate(buffer_b[0, 1])
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -480,6 +483,30 @@ def test_cast(node, expected):
 )
 def test_binary_op(node, expected):
     assert as_tir_script(node) == format_script(expected)
+
+
+def test_mod():
+    assert as_tir_script(Mod(5, 2)) == format_script(
+        """
+        T.truncmod(5, 2)
+        """
+    )
+
+
+def test_min():
+    assert as_tir_script(Min(5, 2)) == format_script(
+        """
+        T.min(5, 2)
+        """
+    )
+
+
+def test_max():
+    assert as_tir_script(Max(5, 2)) == format_script(
+        """
+        T.max(5, 2)
+        """
+    )
 
 
 def test_not():
@@ -733,7 +760,7 @@ def test_evaluate():
     node = Evaluate(3 + var)
     expected = """
     a: T.int32
-    3 + a
+    T.evaluate(3 + a)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -743,9 +770,9 @@ def test_assert_normal_form():
     node = SeqStmt([AssertStmt(1, StringImm("test"), body), Evaluate(4)])
     expected = """
     with T.Assert(1, "test"):
-        2
-        3
-    4
+        T.evaluate(2)
+        T.evaluate(3)
+    T.evaluate(4)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -755,8 +782,8 @@ def test_assert_concise_form():
     node = AssertStmt(1, StringImm("test"), body)
     expected = """
     assert 1, "test"
-    2
-    3
+    T.evaluate(2)
+    T.evaluate(3)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -769,9 +796,9 @@ def test_assert_body_concise_form():
     expected = """
     assert 1, "test"
     with T.Assert(2, "test"):
-        3
+        T.evaluate(3)
     assert 4, "test"
-    5
+    T.evaluate(5)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -780,9 +807,9 @@ def test_if_then_else():
     node = IfThenElse(1, Evaluate(2), Evaluate(3))
     expected = """
     if 1:
-        2
+        T.evaluate(2)
     else:
-        3
+        T.evaluate(3)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -791,7 +818,7 @@ def test_if_then_else_empty_else():
     node = IfThenElse(1, Evaluate(2), None)
     expected = """
     if 1:
-        2
+        T.evaluate(2)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -802,9 +829,9 @@ def test_if_then_else_free_var():
     expected = """
     a: T.int32
     if 1:
-        a
+        T.evaluate(a)
     else:
-        a + 1
+        T.evaluate(a + 1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -815,7 +842,7 @@ def test_while():
     expected = """
     a: T.int32
     while a:
-        a * 2
+        T.evaluate(a * 2)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -836,7 +863,7 @@ def test_let_stmt():
     node = LetStmt(x, 1, Evaluate(x + 1))
     expected = """
     x: T.int32 = 1
-    x + 1
+    T.evaluate(x + 1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -847,9 +874,9 @@ def test_let_stmt_concise_scoping():
     expected = """
     x: T.int32 = T.var("int32")
     with T.let(x, 1):
-        x + 1
+        T.evaluate(x + 1)
     x: T.int32 = 2
-    x + 2
+    T.evaluate(x + 2)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -970,7 +997,7 @@ def test_attr_stmt_launch_thread():
     expected = """
     i = T.env_thread("blockIdx.x")
     T.launch_thread(i, 8)
-    i
+    T.evaluate(i)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -983,7 +1010,7 @@ def test_attr_stmt_launch_thread_multiple():
     i = T.env_thread("blockIdx.x")
     T.launch_thread(i, 8)
     T.launch_thread(i, 24)
-    i
+    T.evaluate(i)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1002,7 +1029,7 @@ def test_for_single_loop(for_kind, f_name):
     node = For(i, 3, 13, for_kind, Evaluate(i), annotations={"abc": StringImm("xyz")})
     expected = f"""
     for i in T.{f_name}(3, 16, annotations={{"abc": "xyz"}}):
-        i
+        T.evaluate(i)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1013,7 +1040,7 @@ def test_for_thread_binding():
     node = For(i, 0, 16, ForKind.THREAD_BINDING, Evaluate(i), iter_var)
     expected = """
     for i in T.thread_binding(16, thread="blockIdx.x"):
-        i
+        T.evaluate(i)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1028,7 +1055,7 @@ def test_for_merged_simple_loops():
     node = loop1
     expected = """
     for i, j, k in T.grid(16, 16, 16):
-        i + j + k
+        T.evaluate(i + j + k)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1045,7 +1072,7 @@ def test_for_nested_non_simple_loops_non_zero_min_val():
     for i in T.serial(16):
         for j in T.serial(1, 17):
             for k in T.serial(16):
-                i + j + k
+                T.evaluate(i + j + k)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1061,7 +1088,7 @@ def test_for_nested_non_simple_loops_var_dependency():
     expected = """
     for i in T.serial(16):
         for j, k in T.grid(i, 16):
-            i + j + k
+            T.evaluate(i + j + k)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1078,7 +1105,7 @@ def test_for_nested_non_simple_loops_non_serial_for_kind():
     for i in T.serial(16):
         for j in T.vectorized(16):
             for k in T.serial(16):
-                i + j + k
+                T.evaluate(i + j + k)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1086,7 +1113,7 @@ def test_for_nested_non_simple_loops_non_serial_for_kind():
 def test_block_simple():
     node = Block([], [], [], "main", Evaluate(1))
     expected = """
-    1
+    T.evaluate(1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1129,8 +1156,8 @@ def test_block_all_params():
     d = T.match_buffer(a[0:4, 0:9], shape=(4, 9))
     e = T.match_buffer(d[0:2, 0:2], shape=(2, 2))
     with T.init():
-        2
-    1
+        T.evaluate(2)
+    T.evaluate(1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1148,7 +1175,7 @@ def test_block_realize_simple():
     with T.block("main"):
         v_i = T.axis.spatial((1, 5), i)
         v_j = T.axis.spatial((3, 7), j + 2)
-        1
+        T.evaluate(1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1165,7 +1192,7 @@ def test_block_realize_with_predicate():
     with T.block("main"):
         v_i = T.axis.spatial((1, 5), i)
         T.where(p)
-        1
+        T.evaluate(1)
     """
     assert as_tir_script(node) == format_script(expected)
 
@@ -1198,7 +1225,7 @@ def test_block_realize_merged_simple_block_vars():
             v_i = T.axis.opaque(16, i)
             v_j, v_k, v_m = T.axis.remap("SRS", [j, k, m])
             v_n = T.axis.spatial((1, 17), n + 1)
-            1
+            T.evaluate(1)
     """
     assert as_tir_script(node) == format_script(expected)
 

@@ -32,26 +32,39 @@ namespace tvm {
 namespace script {
 namespace printer {
 
-ExprDoc BufferPrintInfo::AsCall(
-    const ExprDoc& prefix, std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const {
-  return AsCall(prefix, {}, converter);
+ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix,
+                                std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter,
+                                BufferShapePrintStyle shape_style) const {
+  return AsCall(prefix, {}, converter, shape_style);
 }
 
-ExprDoc BufferPrintInfo::AsCall(
-    const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
-    std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter) const {
+ExprDoc BufferPrintInfo::AsCall(const ExprDoc& prefix, const Array<ExprDoc>& extra_args,
+                                std::function<ExprDoc(const TracedObject<PrimExpr>&)> converter,
+                                BufferShapePrintStyle shape_style) const {
   Array<ExprDoc> args(extra_args);
   Array<String> kwargs_keys;
   Array<ExprDoc> kwargs_values;
+
   {
     Array<ExprDoc> results;
     results.reserve(shape.size());
     for (TracedObject<PrimExpr> e : shape) {
       results.push_back(converter(e));
     }
-    kwargs_keys.push_back("shape");
-    kwargs_values.push_back(TupleDoc(results));
+    switch (shape_style) {
+      case BufferShapePrintStyle::kKeywordArg:
+        kwargs_keys.push_back("shape");
+        kwargs_values.push_back(TupleDoc(results));
+        break;
+      case BufferShapePrintStyle::kFirstArgAsList:
+        args.insert(args.begin(), ListDoc(results));
+        break;
+      case BufferShapePrintStyle::kFirstArgAsTuple:
+        args.insert(args.begin(), TupleDoc(results));
+        break;
+    }
   }
+
   if (dtype.defined()) {
     args.push_back(dtype.value());
   }
@@ -59,10 +72,19 @@ ExprDoc BufferPrintInfo::AsCall(
     kwargs_keys.push_back("data");
     kwargs_values.push_back(converter(data.value()));
   }
-  if (strides.defined()) {
+  if (!axis_separators.empty()) {
     Array<ExprDoc> results;
-    results.reserve(strides.value().size());
-    for (TracedObject<PrimExpr> stride : strides.value()) {
+    results.reserve(strides.size());
+    for (TracedObject<PrimExpr> separator : axis_separators) {
+      results.push_back(converter(separator));
+    }
+    kwargs_keys.push_back("axis_separators");
+    kwargs_values.push_back(ListDoc(results));
+  }
+  if (!strides.empty()) {
+    Array<ExprDoc> results;
+    results.reserve(strides.size());
+    for (TracedObject<PrimExpr> stride : strides) {
       results.push_back(converter(stride));
     }
     kwargs_keys.push_back("strides");
@@ -133,15 +155,6 @@ static TracedOptional<tir::Var> GetBufferData(const TracedObject<tir::Buffer>& b
     return TracedOptional<tir::Var>(NullOpt, data.GetPath());
   } else {
     return data;
-  }
-}
-
-static TracedOptional<Array<PrimExpr>> GetBufferStrides(const TracedObject<tir::Buffer>& buffer) {
-  auto strides = buffer.GetAttr(&tir::BufferNode::strides);
-  if (!strides.empty()) {
-    return TracedOptional<Array<PrimExpr>>(strides);
-  } else {
-    return TracedOptional<Array<PrimExpr>>(NullOpt, strides.GetPath());
   }
 }
 
@@ -235,7 +248,8 @@ std::vector<BufferPrintInfo> GetBufferPrintInfo(
                         /* .shape = */ buffer.GetAttr(&tir::BufferNode::shape),
                         /* .dtype = */ GetBufferDtype(buffer),
                         /* .data = */ GetBufferData(buffer, *associated_vars),
-                        /* .strides = */ GetBufferStrides(buffer),
+                        /* .axis_separators = */ buffer.GetAttr(&tir::BufferNode::axis_separators),
+                        /* .strides = */ buffer.GetAttr(&tir::BufferNode::strides),
                         /* .elem_offset = */ GetBufferElemOffset(buffer, *associated_vars),
                         /* .scope = */ GetBufferScope(buffer),
                         /* .align = */ GetBufferAlignment(buffer),
@@ -280,10 +294,11 @@ TracedObject<String> GetBufferNameHint(const TracedObject<tir::Buffer>& buf) {
   }
 }
 
-std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& buffers,
-                                 const Array<ExprDoc>& extra_args, const Frame& frame,
-                                 const IRDocsifier& p, const ExprDoc& definition_prefix,
-                                 std::function<void(IdDoc, ExprDoc)> add_definiton) {
+std::vector<IdDoc> DefineBuffers(
+    const std::vector<TracedObject<tir::Buffer>>& buffers, const Array<ExprDoc>& extra_args,
+    const Frame& frame, const IRDocsifier& p, const ExprDoc& definition_prefix,
+    std::function<void(IdDoc, ExprDoc)> add_definiton,
+    BufferShapePrintStyle shape_style) {
   std::vector<IdDoc> result;
 
   auto f_var_defined = [&p](const tir::VarNode* var) -> bool {
@@ -302,7 +317,8 @@ std::vector<IdDoc> DefineBuffers(const std::vector<TracedObject<tir::Buffer>>& b
     result.push_back(buf_doc);
     ExprDoc buf_definition = buffer_print_info.AsCall(
         definition_prefix, extra_args,
-        [&p](const TracedObject<PrimExpr>& expr) -> ExprDoc { return p->AsDoc<ExprDoc>(expr); });
+        [&p](const TracedObject<PrimExpr>& expr) -> ExprDoc { return p->AsDoc<ExprDoc>(expr); },
+        shape_style);
     add_definiton(buf_doc, buf_definition);
   }
   associated_vars.Define(p->vars.get(), frame);
