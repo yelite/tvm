@@ -32,13 +32,6 @@ def _parse_args():
         """,
     )
     args.add_argument(
-        "--frontend",
-        type=str,
-        default="torchdynamo",
-        choices=["torchdynamo"],
-        help="The frontend to ingest model from torchbench.",
-    )
-    args.add_argument(
         "--target",
         type=tvm.target.Target,
         required=True,
@@ -51,11 +44,62 @@ def _parse_args():
         help="The working directory to save intermediate results.",
     )
     args.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="""
+        The directory to cache the generated network.
+        If not specified, the cache will be disabled.
+        """,
+    )
+    args.add_argument(
         "--num-trials",
         type=int,
         required=True,
         help="The number of trials to run per iteration of MetaSchedule.",
     )
+    args.add_argument(
+        "--backend",
+        type=str,
+        choices=["graph", "vm"],
+        default="graph",
+        help="The backend to use for relay compilation(graph / vm).",
+    )
+
+    # Evaluator-related config
+    args.add_argument(
+        "--number",
+        type=int,
+        default=3,
+        help="The number of times to run the model for taking average in a single measurement.",
+    )
+    args.add_argument(
+        "--repeat",
+        type=int,
+        default=1,
+        help="The number of times to repeat the measurement.",
+    )
+    args.add_argument(
+        "--min-repeat-ms",
+        type=int,
+        default=100,
+        help="""
+        Minimum repeat time in ms. The number of runs will be increased if the actual
+        repeat time is lowered than this.
+        """,
+    )
+    args.add_argument(
+        "--disable-adaptive-training",
+        action="store_true",
+        help="Whether to disable adpative training for cost model.",
+    )
+    args.add_argument(
+        "--disable-cpu-flush",
+        action="store_true",
+        help="Whether to disable CPU cache flush.",
+    )
+
+    # RPC-related args
     args.add_argument(
         "--rpc-host",
         type=str,
@@ -71,6 +115,7 @@ def _parse_args():
         type=str,
         help="Key of the RPC Tracker for tuning",
     )
+
     parsed = args.parse_args()
     return parsed
 
