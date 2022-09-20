@@ -65,6 +65,8 @@ def _parse_args():
         default="graph",
         help="The backend to use for relay compilation(graph / vm).",
     )
+    # TODO: Add a layout arg to transform the network after
+    #       ingesting into Relay and before feeding into MetaSchedule.
 
     # Evaluator-related config
     args.add_argument(
