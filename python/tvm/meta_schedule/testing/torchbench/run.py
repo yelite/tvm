@@ -16,12 +16,36 @@
 # under the License.
 import argparse
 import logging
+import os
+import sys
 
 import tvm
+from tvm.support import describe
+from tvm.meta_schedule.testing.torchbench.util import load_torchbench, load_torchdynamo
+
+torchdynamo = load_torchdynamo()
 
 
-def _parse_args():
+def parse_args():
     args = argparse.ArgumentParser()
+
+    args.add_argument(
+        "--no-tuning",
+        action="store_true",
+        help="""
+        Run the script without tuning. It compiles the model using
+        existing database at workdir.
+        """,
+    )
+    args.add_argument(
+        "--no-benchmark",
+        action="store_true",
+        help="""
+        Skip running the benchmark and exit right after tuning finishes.
+        """,
+    )
+
+    # Model selection
     args.add_argument(
         "--model",
         type=str,
@@ -31,6 +55,8 @@ def _parse_args():
         https://github.com/pytorch/benchmark/tree/main/torchbenchmark/models.
         """,
     )
+
+    # Tuning-related config
     args.add_argument(
         "--target",
         type=tvm.target.Target,
@@ -126,12 +152,33 @@ logging.basicConfig(
     format="%(asctime)s.%(msecs)03d %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 logging.getLogger("tvm.meta_schedule").setLevel(logging.INFO)
-ARGS = _parse_args()
+ARGS = parse_args()
+
+
+def get_benchmark_runner():
+    pass
+
+
+def get_torchdynamo_backend():
+    pass
+
+
+def run_benchmark():
+    pass
 
 
 def main():
-    pass
+    describe()
+
+    if not ARGS.without_tuning:
+        pass
+
+    if ARGS.only_tuning:
+        pass
+
+    
 
 
 if __name__ == "__main__":
     main()
+
