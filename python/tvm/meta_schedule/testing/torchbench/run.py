@@ -15,22 +15,29 @@
 # specific language governing permissions and limitations
 # under the License.
 import argparse
+import functools
 import logging
-import os
-import sys
+
+import numpy as np
+import torch
+from scipy.stats import ttest_ind
 
 import tvm
+from tvm import meta_schedule as ms
+from tvm.contrib import graph_executor
+from tvm.meta_schedule.testing.torchbench.util import (
+    load_torchdynamo_benchmark_runner, same, timed)
 from tvm.support import describe
-from tvm.meta_schedule.testing.torchbench.util import load_torchbench, load_torchdynamo
 
-torchdynamo = load_torchdynamo()
+runner = load_torchdynamo_benchmark_runner()
+import torchdynamo
 
 
 def parse_args():
     args = argparse.ArgumentParser()
 
     args.add_argument(
-        "--no-tuning",
+        "--disable-tuning",
         action="store_true",
         help="""
         Run the script without tuning. It compiles the model using
@@ -38,11 +45,17 @@ def parse_args():
         """,
     )
     args.add_argument(
-        "--no-benchmark",
+        "--disable-benchmark",
         action="store_true",
         help="""
         Skip running the benchmark and exit right after tuning finishes.
         """,
+    )
+    args.add_argument(
+        "--benchmark-repeat",
+        type=int,
+        default=30,
+        help="The number of times to repeat the benchmark measurement.",
     )
 
     # Model selection
@@ -154,31 +167,99 @@ logging.basicConfig(
 logging.getLogger("tvm.meta_schedule").setLevel(logging.INFO)
 ARGS = parse_args()
 
-
-def get_benchmark_runner():
-    pass
-
-
-def get_torchdynamo_backend():
-    pass
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
-def run_benchmark():
-    pass
+def create_tvm_backend():
+    def backend(graph_module, example_inputs):
+        jit_mod = torch.jit.trace(graph_module, example_inputs)
+        shape_list = [(f"inp_{idx}", i.shape) for idx, i in enumerate(example_inputs)]
+        ir_mod, params = tvm.relay.frontend.from_pytorch(jit_mod, shape_list)
+
+        lib = ms.tune_relay(
+            mod=ir_mod,
+            target=ARGS.target,
+            config=ms.TuneConfig(
+                strategy="evolutionary",
+                num_trials_per_iter=64,
+                max_trials_per_task=ARGS.num_trials,
+                max_trials_global=ARGS.num_trials,
+                adaptive_training=not ARGS.disable_adaptive_training,
+            ),
+            work_dir=ARGS.work_dir,
+            params=params,
+            backend=ARGS.backend,
+        )
+        
+        device = tvm.cuda(0) if ARGS.target.kind.name == "cuda" else tvm.cpu(0)
+
+        if ARGS.backend == "graph":
+            mod = graph_executor.GraphModule(lib["default"](device))
+        elif ARGS.backend == "vm":
+            raise RuntimeError("vm backend not supported yet") 
+
+        # From https://github.com/pytorch/torchdynamo/blob/main/torchdynamo/optimizations/backends.py#L712
+        def forward(*args):
+            args = [arg.contiguous() for arg in args]
+            for idx, arg in enumerate(args, 0):
+                mod.set_input(
+                    f"inp_{idx}",
+                    tvm.nd.from_dlpack(arg),
+                )
+            mod.run()
+            return [torch.from_dlpack(mod.get_output(i)) for i in range(mod.get_num_outputs())]
+
+        return forward
+
+    return backend
+
+
+def performance_experiment(model_iter_fn, model, example_inputs):
+    # Simplified from https://github.com/pytorch/torchdynamo/blob/c537639f9712621dc04ca09908796dbbe86c354b/benchmarks/common.py#L494
+
+    timings = np.zeros((ARGS.benchmark_repeat, 2), np.float64)
+
+    is_correct = True
+
+    frozen_model_iter_fn = torchdynamo.run(model_iter_fn)
+    for rep in range(ARGS.benchmark_repeat):
+        # interleave the runs to handle frequency scaling and load changes
+        timings[rep, 0], expected_output = timed(
+            model, model_iter_fn, example_inputs, return_result=True
+        )
+        timings[rep, 1], actual_output = timed(
+            model, frozen_model_iter_fn, example_inputs, return_result=True
+        )
+        is_correct = is_correct and same(expected_output, actual_output)
+
+    pvalue = ttest_ind(timings[:, 0], timings[:, 1]).pvalue
+    median = np.median(timings, axis=0)
+    speedup = median[0] / median[1]
+    logger.info(
+        f"eager:{median[0]:.3g} optimized:{median[1]:.3g} speedup:{speedup:.3f}x p:{pvalue:.3f}"
+    )
+
+    return ""
 
 
 def main():
     describe()
 
-    if not ARGS.without_tuning:
-        pass
+    optimize_ctx = torchdynamo.optimize(create_tvm_backend())
 
-    if ARGS.only_tuning:
-        pass
+    try:
+        device, name, model, example_inputs, batch_size = runner.load_model(
+            ARGS.target.kind.name,
+            ARGS.model,
+        )
+    except NotImplementedError as e:
+        logging.exception(f"{ARGS.model} failed to load")
+        return
 
-    
+    experiment = functools.partial(performance_experiment, runner.model_iter_fn)
+    runner.run_one_model(name, model, example_inputs, optimize_ctx, experiment)
 
 
 if __name__ == "__main__":
     main()
-

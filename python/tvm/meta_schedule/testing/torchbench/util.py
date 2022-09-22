@@ -16,48 +16,47 @@
 # under the License.
 import os
 import sys
+from dataclasses import dataclass
+
+candidates = [
+    "torchdynamo",
+    "../torchdynamo",
+    "../../torchdynamo",
+]
+for library_dir in candidates:
+    if os.path.exists(f"{library_dir}/benchmarks"):
+        break
+else:
+    raise RuntimeError(
+        f"Cannot find directory for torchdynamo. You need to clone https://github.com/pytorch/torchdynamo to the parent directory of cwd."
+    )
+
+sys.path.append(library_dir)
+sys.path.append(f"{library_dir}/benchmarks")
+from common import same, timed
+from torchbench import TorchBenchmarkRunner
 
 
-def find_library_dir(name, candidates):
-    for library_dir in candidates:
-        if os.path.exists(library_dir):
-            break
+@dataclass
+class RunnerArgs:
+    ci: bool = False
+    training: bool = False
+    use_eval_mode: bool = False
+    dynamic_shapes: bool = False
+    float16: bool = False
+    float32: bool = False
 
-    assert os.path.exists(library_dir), f"Cannot find dir for {name}"
-    return library_dir
+    accuracy: bool = False
+    performance: bool = True
 
-
-def load_torchbench():
-    try:
-        import torchbenchmark
-    except ImportError:
-        sys.path.append(
-            find_library_dir(
-                "torchbench",
-                [
-                    "../benchmark",
-                    "../../benchmark",
-                ],
-            )
-        )
-        import torchbenchmark
-
-    return torchbenchmark
+    cosine: bool = True
 
 
-def load_torchdynamo():
-    try:
-        import torchdynamo
-    except ImportError:
-        sys.path.append(
-            find_library_dir(
-                "torchdynamo",
-                [
-                    "../torchdynamo",
-                    "../../torchdynamo",
-                ],
-            )
-        )
-        import torchdynamo
 
-    return torchdynamo
+def load_torchdynamo_benchmark_runner():
+    args = RunnerArgs()
+
+    runner = TorchBenchmarkRunner()
+    runner.args = args
+    runner.model_iter_fn = runner.forward_pass
+    return runner
