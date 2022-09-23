@@ -14,9 +14,21 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""
+This script is for benchmarking TVM performance on models from TorchBench.
+It uses the torchdynamo as the frontend to ingest models into TVM, and it also
+leverages the benchmark util from torchdynamo.
+
+To setup environment:
+1. Clone https://github.com/pytorch/torchdynamo and https://github.com/pytorch/benchmark 
+   to the parent directory of TVM.
+2. Follow the install instruction of torchdynamo and pytorch/benchmark.
+"""
+
 import argparse
 import functools
 import logging
+import time
 
 import numpy as np
 import torch
@@ -25,8 +37,7 @@ from scipy.stats import ttest_ind
 import tvm
 from tvm import meta_schedule as ms
 from tvm.contrib import graph_executor
-from tvm.meta_schedule.testing.torchbench.util import (
-    load_torchdynamo_benchmark_runner, same, timed)
+from tvm.meta_schedule.testing.torchbench.util import load_torchdynamo_benchmark_runner, same, timed
 from tvm.support import describe
 
 runner = load_torchdynamo_benchmark_runner()
@@ -171,6 +182,27 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def get_metaschedule_runner():
+    if ARGS.rpc_host is not None:
+        return ms.runner.RPCRunner(
+            rpc_config=ms.runner.RPCConfig(
+                tracker_host=ARGS.rpc_host,
+                tracker_port=ARGS.rpc_port,
+                tracker_key=ARGS.rpc_key,
+                session_timeout_sec=600,
+            ),
+            evaluator_config=ms.runner.EvaluatorConfig(
+                number=ARGS.number,
+                repeat=ARGS.repeat,
+                min_repeat_ms=ARGS.min_repeat_ms,
+                enable_cpu_cache_flush=ARGS.cpu_flush,
+            ),
+            alloc_repeat=1,
+        )
+    else:
+        return ms.runner.LocalRunner()
+
+
 def create_tvm_backend():
     def backend(graph_module, example_inputs):
         jit_mod = torch.jit.trace(graph_module, example_inputs)
@@ -187,17 +219,18 @@ def create_tvm_backend():
                 max_trials_global=ARGS.num_trials,
                 adaptive_training=not ARGS.disable_adaptive_training,
             ),
+            runner=get_metaschedule_runner(),
             work_dir=ARGS.work_dir,
             params=params,
             backend=ARGS.backend,
         )
-        
+
         device = tvm.cuda(0) if ARGS.target.kind.name == "cuda" else tvm.cpu(0)
 
         if ARGS.backend == "graph":
             mod = graph_executor.GraphModule(lib["default"](device))
         elif ARGS.backend == "vm":
-            raise RuntimeError("vm backend not supported yet") 
+            raise RuntimeError("vm backend not supported yet")
 
         # From https://github.com/pytorch/torchdynamo/blob/main/torchdynamo/optimizations/backends.py#L712
         def forward(*args):
@@ -217,7 +250,6 @@ def create_tvm_backend():
 
 def performance_experiment(model_iter_fn, model, example_inputs):
     # Simplified from https://github.com/pytorch/torchdynamo/blob/c537639f9712621dc04ca09908796dbbe86c354b/benchmarks/common.py#L494
-
     timings = np.zeros((ARGS.benchmark_repeat, 2), np.float64)
 
     is_correct = True
@@ -228,9 +260,13 @@ def performance_experiment(model_iter_fn, model, example_inputs):
         timings[rep, 0], expected_output = timed(
             model, model_iter_fn, example_inputs, return_result=True
         )
+        time.sleep(0.2)  # sleep to decrease the impact from the other model run
+
         timings[rep, 1], actual_output = timed(
             model, frozen_model_iter_fn, example_inputs, return_result=True
         )
+        time.sleep(0.2)
+
         is_correct = is_correct and same(expected_output, actual_output)
 
     pvalue = ttest_ind(timings[:, 0], timings[:, 1]).pvalue
