@@ -27,7 +27,6 @@ from tvm.target import Target
 from tvm.ir import IRModule
 from tvm.tir import Schedule
 from tvm import meta_schedule as ms
-from tvm.meta_schedule.testing.custom_builder_runner import run_module_via_rpc
 from tvm.meta_schedule.testing.tune_utils import create_calculator, generate_input_data
 from tvm._ffi import get_global_func, register_func
 from tvm.support import describe
@@ -56,21 +55,6 @@ def _parse_args():
         help="The baseline target to compile the original module.",
     )
     args.add_argument(
-        "--rpc-host",
-        type=str,
-        required=True,
-    )
-    args.add_argument(
-        "--rpc-port",
-        type=int,
-        required=True,
-    )
-    args.add_argument(
-        "--rpc-key",
-        type=str,
-        required=True,
-    )
-    args.add_argument(
         "--number",
         type=int,
         default=3,
@@ -93,12 +77,6 @@ def _parse_args():
     )
     parsed = args.parse_args()
     parsed.target = tvm.target.Target(parsed.target)
-    parsed.rpc_config = ms.runner.RPCConfig(
-        tracker_host=parsed.rpc_host,
-        tracker_port=parsed.rpc_port,
-        tracker_key=parsed.rpc_key,
-        session_timeout_sec=600,
-    )
     if parsed.cpu_flush and parsed.target.kind.name != "llvm":
         warnings.warn("cpu_flush is only supported on llvm target")
     return parsed
@@ -140,7 +118,6 @@ def validate_correctness(
     baseline_target: Target,
     target: Target,
     dev_type: str,
-    rpc_config: ms.runner.RPCConfig,
     f_input_generator: Union[
         str, Callable[[IRModule], List[tvm.nd.NDArray]]
     ] = default_input_generator,
@@ -160,10 +137,6 @@ def validate_correctness(
         The baseline target to compile the original module.
     target : Target
         The target to compile the scheduled module.
-    dev_type : str
-        The device type to run the module via rpc.
-    rpc_config : RPCConfig
-        The RPCConfig to run the scheduled module.
     f_input_generator : Union[str, Callable]
         The function to generate the input data.
     f_check_metric : Union[str, Callable]
@@ -188,14 +161,10 @@ def validate_correctness(
     def build_and_run(mod: IRModule, target: Target, dev_type: str) -> np.ndarray:
         """Build and run the module on the target device."""
         rt_mod = tvm.build(mod, target=target)
-        return run_module_via_rpc(
-            rpc_config=rpc_config,
-            lib=rt_mod,
-            dev_type=dev_type,
-            args={i: v for i, v in enumerate(inputs)},  # pylint: disable=unnecessary-comprehension
-            continuation=create_calculator(backend="tir"),
-            backend="tir",
-        )
+        dev = tvm.device(dev_type)
+        data = [tvm.runtime.ndarray.array(v, dev) for v in inputs]
+        rt_mod(*data)
+        return data
 
     # fetch functions & prepare inputs
     if isinstance(f_input_generator, str):
@@ -253,7 +222,6 @@ def main():
                         target=target,
                         baseline_target=ARGS.baseline_target,
                         dev_type=dev_type,
-                        rpc_config=ARGS.rpc_config,
                     )
                 except Exception as e:  # pylint: disable=broad-except, invalid-name
                     print(
