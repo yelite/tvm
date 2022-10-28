@@ -213,6 +213,7 @@ def main():
     dev_type = "cpu" if Target(ARGS.target).kind.name == "llvm" else "cuda"
     records = get_best_tuning_records(database)
     print(f"Got {len(records)} best tuning records for each workload")
+    failed_records = 0
     with ms.Profiler() as profiler:
         for i, record in enumerate(records):
             scope_name = f"validate #{i}"
@@ -241,13 +242,15 @@ def main():
                             ]
                         )
                     )
+                if not flag:
+                    failed_records += 1
+
             print(
                 f"Progress {i+1: 6d} / {len(records): 6d} checked,"
                 f" used {float(profiler.get()[scope_name]): 3.3f} sec."
             )
 
-    print("Validation passed!")
-    print(f"Total time spent: {float(profiler.get()['Total']): 3.3f} sec.")
+    print(f"Validation finished with {failed_records} failed records")
 
 
 if __name__ == "__main__":
