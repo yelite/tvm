@@ -234,13 +234,10 @@ def main():
                             ]
                         )
                     )
-            if is_success:
-                print(
-                    f"Progress {i+1: 6d} / {len(records): 6d} checked,"
-                    f" used {float(profiler.get()[scope_name]): 3.3f} sec."
-                )
-            else:
-                return
+            print(
+                f"Progress {i+1: 6d} / {len(records): 6d} checked,"
+                f" used {float(profiler.get()[scope_name]): 3.3f} sec."
+            )
 
     print("Validation passed!")
     print(f"Total time spent: {float(profiler.get()['Total']): 3.3f} sec.")
