@@ -194,18 +194,25 @@ def validate_correctness(
         return False
 
 
+def get_best_tuning_records(database):
+    records = database.get_all_tuning_records()
+    print(f"Got {len(records)} tuning records from database")
+    workloads = set(r.workload for r in records)
+    return [records 
+            for workload in workloads
+            for records in database.get_top_k(workload, 1)]
+
+
 def main():
     """Main function"""
     describe()
-    database = ms.database.create(work_dir=ARGS.work_dir)
-    target = ARGS.target
-    if target.kind.name == "llvm":
-        dev_type = "cpu"
-    elif target.kind.name == "cuda":
-        dev_type = "cuda"
-    else:
-        raise RuntimeError(f"Unsupported target kind: {target.kind.name}")
-    records = database.get_all_tuning_records()
+    database = ms.database.JSONDatabase(
+        path_workload=ARGS.path_workload, path_tuning_record=ARGS.path_tuning_record
+    )
+    assert Target(ARGS.target).kind.name in ["llvm", "cuda"]
+    dev_type = "cpu" if Target(ARGS.target).kind.name == "llvm" else "cuda"
+    records = get_best_tuning_records(database)
+    print(f"Got {len(records)} best tuning records for each workload")
     with ms.Profiler() as profiler:
         for i, record in enumerate(records):
             scope_name = f"validate #{i}"
