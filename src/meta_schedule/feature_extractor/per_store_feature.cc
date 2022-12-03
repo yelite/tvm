@@ -1403,7 +1403,11 @@ class PerStoreFeatureNode : public FeatureExtractorNode {
           feature_group6->Export(&feature);
         }
       }
-      results[task_id] = tir::utils::AsNDArray(features);
+      if (features.empty()) {
+        results[task_id] = runtime::NDArray(nullptr);
+      } else {
+        results[task_id] = tir::utils::AsNDArray(features);
+      }
     };
     support::parallel_for_dynamic(0, candidates.size(), tune_context->num_threads, f);
     return results;
