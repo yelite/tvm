@@ -474,11 +474,11 @@ class XGBModel(PyCostModel):
             return float(np.median([float(s) for s in x.run_secs]))
 
         extracted_features = self.extractor.extract_from(context, candidates)
-        new_features, new_mean_costs = zip(
+        new_features, new_mean_costs = zip(*(
             (_feature(x), _mean_cost(c))
             for x, c in zip(extracted_features, results)
             if x is not None
-        )
+        ))
         new_mean_costs = np.array(new_mean_costs).astype("float32")
 
         # Steps 3. Run validation
