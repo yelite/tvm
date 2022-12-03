@@ -110,6 +110,7 @@ import tvm.relay
 from tvm import meta_schedule as ms
 from tvm._ffi import get_global_func
 from tvm.contrib.graph_executor import GraphModule
+from tvm.meta_schedule.testing.torchbench.data import LocalBenchmarkDataStorage
 from tvm.meta_schedule.testing.torchbench.utils import (
     DisallowedOperator,
     load_torchdynamo_benchmark_runner,
@@ -353,6 +354,8 @@ IS_CUDA = ARGS.target.kind.name == "cuda"
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 logger.setLevel(logging.INFO)
 
+store = LocalBenchmarkDataStorage(ARGS.work_dir)
+
 
 runner = load_torchdynamo_benchmark_runner(  # pylint: disable=invalid-name
     IS_CUDA,
@@ -476,8 +479,6 @@ def create_tvm_task_collection_backend() -> Tuple[Callable, List[ms.ExtractedTas
     """
 
     subgraph_idx = 0
-    subgraphs_dir = os.path.join(ARGS.work_dir, "subgraphs")
-    os.makedirs(subgraphs_dir, exist_ok=True)
 
     collected_tasks = []
     task_index: Dict[int, List[ms.ExtractedTask]] = defaultdict(list)
@@ -496,8 +497,8 @@ def create_tvm_task_collection_backend() -> Tuple[Callable, List[ms.ExtractedTas
     def backend(graph_module, example_inputs):
         nonlocal subgraph_idx
 
-        torch.save(graph_module, os.path.join(subgraphs_dir, f"graph_module_{subgraph_idx}"))
-        torch.save(example_inputs, os.path.join(subgraphs_dir, f"example_inputs_{subgraph_idx}"))
+        store.set_subgraph(str(subgraph_idx), graph_module)
+        store.set_subgraph_example_inputs(str(subgraph_idx), example_inputs)
 
         if should_skip_subgraph(graph_module):
             return graph_module.forward
@@ -655,41 +656,30 @@ def performance_experiment(
     Performs the actual benchmarking
     Simplified from https://github.com/pytorch/torchdynamo/blob/c537639f9712621dc04ca09908796dbbe86c354b/benchmarks/common.py#L494 pylint: disable=line-too-long
     """
-    timings = np.zeros((ARGS.benchmark_repeat, 2), np.float64)
+    timings = np.zeros(ARGS.benchmark_repeat, np.float64)
     if IS_CUDA:
         torch.cuda.empty_cache()
 
-    is_correct = True
+    error_inspected = False
 
-    frozen_model_iter_fn = torchdynamo.run(model_iter_fn)
+    optimized_model_iter_fn = torchdynamo.run(model_iter_fn)
+    expected_output = model_iter_fn(model, example_inputs)
 
     for _ in range(ARGS.benchmark_warmup_rounds):
-        frozen_model_iter_fn(model, example_inputs)
-        model_iter_fn(model, example_inputs)
+        optimized_model_iter_fn(model, example_inputs)
 
     for rep in range(ARGS.benchmark_repeat):
-        # interleave the runs to handle frequency scaling and load changes
-        timings[rep, 0], expected_output = timed(
-            model, model_iter_fn, example_inputs, return_result=True
+        timings[rep], actual_output = timed(
+            model, optimized_model_iter_fn, example_inputs, return_result=True
         )
-        timings[rep, 1], actual_output = timed(
-            model, frozen_model_iter_fn, example_inputs, return_result=True
-        )
-        is_correct = is_correct and is_output_correct(expected_output, actual_output)
+        if not is_output_correct(expected_output, actual_output) and not error_inspected:
+            error_inspected = True
+            logger.error("Result is incorrect.")
+            store.set_model_actual_output(actual_output)
+            store.set_model_expected_output(expected_output)
+            inspect_output_error(actual_output, expected_output)
 
-    pvalue = ttest_ind(timings[:, 0], timings[:, 1]).pvalue
-    median = np.median(timings, axis=0)
-    speedup = median[0] / median[1]
-    logger.info(
-        f"eager:{format_time(median[0])} "
-        f"optimized:{format_time(median[1])} "
-        f"speedup:{speedup:.3f}x p:{pvalue:.3f}"
-    )
-    torch.save(actual_output, os.path.join(ARGS.work_dir, "output.pt"))
-    torch.save(expected_output, os.path.join(ARGS.work_dir, "expected.pt"))
-    if not is_correct:
-        logger.error("Result is incorrect.")
-        inspect_output_error(actual_output, expected_output)
+    logger.info(f"median consumed time: {format_time(np.median(timings))}")
 
     return ""
 
@@ -709,10 +699,7 @@ def main():
     """
     describe()
 
-    meta_schedule_work_dir = os.path.join(ARGS.work_dir, "meta_schedule")
-    os.makedirs(meta_schedule_work_dir, exist_ok=True)
-
-    database = ms.database.JSONDatabase(work_dir=meta_schedule_work_dir)
+    database = store.get_metaschedule_database()
     if not ARGS.mode.should_tune:
         if len(database) == 0:
             raise RuntimeError(
@@ -743,29 +730,26 @@ def main():
     with contextlib.ExitStack() as stack:
         profiler = stack.enter_context(ms.Profiler())
         stack.enter_context(torch.no_grad())
-
-        tasks_path = os.path.join(ARGS.work_dir, "extracted_tasks")
+        ms_logging_dir = stack.enter_context(store.with_metaschedule_logging_dir())
 
         if ARGS.mode.should_extract:
             task_collect_backend, extracted_tasks = create_tvm_task_collection_backend()
             task_collect_ctx = torchdynamo.optimize(task_collect_backend)
             task_collect_ctx(runner.model_iter_fn)(model, example_inputs)
-            with open(tasks_path, "wb") as f:
-                pickle.dump(extracted_tasks, f)
+            store.set_extracted_tasks(extracted_tasks)
         else:
-            with open(tasks_path, "rb") as f:
-                extracted_tasks = pickle.load(f)
+            extracted_tasks = store.get_extracted_tasks()
 
         if ARGS.mode.should_tune:
             tasks, task_weights = ms.relay_integration.extracted_tasks_to_tune_contexts(
                 extracted_tasks=extracted_tasks,
-                work_dir=ARGS.work_dir,
+                work_dir=ms_logging_dir,
                 strategy=ARGS.strategy,
             )
             database = ms.tune.tune_tasks(
                 tasks=tasks,
                 task_weights=task_weights,
-                work_dir=ARGS.work_dir,
+                work_dir="This does not exist",
                 max_trials_global=ARGS.num_trials,
                 max_trials_per_task=ARGS.max_trials_per_task,
                 runner=get_meta_schedule_runner(),  # type: ignore
