@@ -88,13 +88,13 @@ class LocalBenchmarkDataStorage(BenchmarkDataStorage):
         return nullcontext(self._ms_workdir)
 
     def get_metaschedule_database(self) -> ms.Database:
-        return ms.JSONDatabase(
+        return ms.database.JSONDatabase(
             path_workload=self._ms_db_tuning_record_json_path,
             path_tuning_record=self._ms_db_tuning_record_json_path,
         )
 
     def set_metaschedule_database(self, database: ms.Database):
-        if isinstance(database, ms.database.JSONDatabase):
+        if isinstance(database, ms.database.database.JSONDatabase):
             if database.path_workload != self._ms_db_workload_json_path:
                 shutil.copy(database.path_workload, self._ms_db_workload_json_path)
             if database.path_tuning_record != self._ms_db_tuning_record_json_path:
