@@ -146,8 +146,6 @@ class GraphExecutorFactoryWrapper : public torch::jit::CustomClassHolder {
   c10::List<at::Tensor> forward(const c10::List<at::Tensor>& inputs) {
     int input_length = inputs.size();
 
-    TORCH_CHECK(input_length > 0, "Receive empty list of input tensors");
-
     std::vector<DLPackTensorExt> tensors;
 
     // Torch tensor supports boolean type while DLpack does not,
