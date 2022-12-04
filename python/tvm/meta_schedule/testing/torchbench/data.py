@@ -89,7 +89,7 @@ class LocalBenchmarkDataStorage(BenchmarkDataStorage):
 
     def get_metaschedule_database(self) -> ms.Database:
         return ms.database.JSONDatabase(
-            path_workload=self._ms_db_tuning_record_json_path,
+            path_workload=self._ms_db_workload_json_path,
             path_tuning_record=self._ms_db_tuning_record_json_path,
         )
 
