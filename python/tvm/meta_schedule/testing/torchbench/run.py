@@ -354,8 +354,9 @@ IS_CUDA = ARGS.target.kind.name == "cuda"
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 logger.setLevel(logging.INFO)
 
-store = LocalBenchmarkDataStorage(ARGS.work_dir)
-
+extract_tasks_store = LocalExtractedTasksStorage(ARGS.work_dir)
+tuning_store = LocalTuningDataStorage(ARGS.work_dir)
+benchmark_store = LocalBenchmarkDataStorage(ARGS.work_dir)
 
 runner = load_torchdynamo_benchmark_runner(  # pylint: disable=invalid-name
     IS_CUDA,
@@ -497,8 +498,8 @@ def create_tvm_task_collection_backend() -> Tuple[Callable, List[ms.ExtractedTas
     def backend(graph_module, example_inputs):
         nonlocal subgraph_idx
 
-        store.set_subgraph(str(subgraph_idx), graph_module)
-        store.set_subgraph_example_inputs(str(subgraph_idx), example_inputs)
+        extract_tasks_store.set_subgraph(str(subgraph_idx), graph_module)
+        extract_tasks_store.set_subgraph_example_inputs(str(subgraph_idx), example_inputs)
 
         if should_skip_subgraph(graph_module):
             return graph_module.forward
@@ -675,8 +676,8 @@ def performance_experiment(
         if not is_output_correct(expected_output, actual_output) and not error_inspected:
             error_inspected = True
             logger.error("Result is incorrect.")
-            store.set_model_actual_output(actual_output)
-            store.set_model_expected_output(expected_output)
+            benchmark_store.set_model_actual_output(actual_output)
+            benchmark_store.set_model_expected_output(expected_output)
             inspect_output_error(actual_output, expected_output)
 
     logger.info(f"median consumed time: {format_time(np.median(timings))}")
@@ -699,7 +700,7 @@ def main():
     """
     describe()
 
-    database = store.get_metaschedule_database()
+    database = tuning_store.get_metaschedule_database()
     if not ARGS.mode.should_tune:
         if len(database) == 0:
             raise RuntimeError(
@@ -730,15 +731,15 @@ def main():
     with contextlib.ExitStack() as stack:
         profiler = stack.enter_context(ms.Profiler())
         stack.enter_context(torch.no_grad())
-        ms_logging_dir = stack.enter_context(store.with_metaschedule_logging_dir())
+        ms_logging_dir = stack.enter_context(tuning_store.with_metaschedule_logging_dir())
 
         if ARGS.mode.should_extract:
             task_collect_backend, extracted_tasks = create_tvm_task_collection_backend()
             task_collect_ctx = torchdynamo.optimize(task_collect_backend)
             task_collect_ctx(runner.model_iter_fn)(model, example_inputs)
-            store.set_extracted_tasks(extracted_tasks)
+            extract_tasks_store.set_extracted_tasks(extracted_tasks)
         else:
-            extracted_tasks = store.get_extracted_tasks()
+            extracted_tasks = extract_tasks_store.get_extracted_tasks()
 
         if ARGS.mode.should_tune:
             tasks, task_weights = ms.relay_integration.extracted_tasks_to_tune_contexts(
