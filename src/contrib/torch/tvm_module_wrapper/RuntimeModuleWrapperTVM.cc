@@ -224,7 +224,7 @@ size_t tvm_contrib_torch_graph_executor_module_forward(TVMContribTorchRuntimeMod
   tvm::runtime::PackedFunc get_num_outputs = runtime_module->mod.GetFunction("get_num_outputs");
 
   for (size_t k = 0; k < input_size; ++k) {
-    set_input(k, &inputs[k].dl_managed_tensor->dl_tensor);
+    set_input("inp_" + std::to_string(k), &inputs[k].dl_managed_tensor->dl_tensor);
   }
 
   run();
