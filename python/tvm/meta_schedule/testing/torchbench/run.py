@@ -462,15 +462,16 @@ def get_vm_forward(virtual_machine: VirtualMachine, device: tvm.runtime.Device) 
 def should_skip_subgraph(graph_module: torch.fx.GraphModule) -> bool:
     """
     Returns whether it should skip optimizing the input graph module.
-    The graph could be empyt or only containing nodes calling function
-    for side effect.
+
+    Skip optimizing graph if it has no inputs or no outputs.
     """
     graph = graph_module.graph
 
     inputs = [n for n in graph.nodes if n.op == "placeholder"]
     outputs = [n for n in graph.nodes if n.op == "output"]
+    has_outputs = all(output.args == ((),) for output in outputs)
 
-    return len(inputs) == 0 and all(output.args == ((),) for output in outputs)
+    return (len(inputs) == 0 or has_outputs or len(graph.nodes) <= 5)
 
 
 def create_tvm_task_collection_backend() -> Tuple[Callable, List[ms.ExtractedTask]]:
@@ -540,7 +541,12 @@ def create_tvm_compilation_backend(database: ms.database.Database) -> Callable:
         if should_skip_subgraph(graph_module):
             return graph_module.forward
 
-        jit_mod = torch.jit.trace(graph_module, example_inputs)
+        try:
+            jit_mod = torch.jit.trace(graph_module, example_inputs)
+        except Exception:
+            logger.exception("Failed to trace module")
+            return graph_module.forward
+
         shape_list = [(f"inp_{idx}", i.shape) for idx, i in enumerate(example_inputs)]
         ir_mod, params = tvm.relay.frontend.from_pytorch(jit_mod, shape_list)
 
