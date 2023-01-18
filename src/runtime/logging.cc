@@ -33,6 +33,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "./backward.hpp"
+
 #if TVM_BACKTRACE_ON_SEGFAULT
 #include <signal.h>
 
@@ -166,21 +168,34 @@ std::string Backtrace() {
     }
   }
 
-  if (_bt_state == nullptr) {
-    return "";
-  }
-  // libbacktrace eats memory if run on multiple threads at the same time, so we guard against it
-  static std::mutex m;
-  std::lock_guard<std::mutex> lock(m);
-  backtrace_full(_bt_state, 0, BacktraceFullCallback, BacktraceErrorCallback, &bt);
+  backward::StackTrace st;
+  st.load_here(bt.max_size);
+  
+  std::ostringstream output;
 
-  std::ostringstream s;
-  s << "Stack trace:\n";
-  for (size_t i = 0; i < bt.lines.size(); i++) {
-    s << "  " << i << ": " << bt.lines[i] << "\n";
-  }
+  backward::Printer p;
+  p.inliner_context_size = 1;
+  p.trace_context_size = 1;
+  p.print(st, output);
 
-  return s.str();
+  return output.str();
+  //
+  // if (_bt_state == nullptr) {
+  //   return "";
+  // }
+  // // libbacktrace eats memory if run on multiple threads at the same time, so we guard against it
+  // static std::mutex m;
+  // std::lock_guard<std::mutex> lock(m);
+  // backtrace_full(_bt_state, 0, BacktraceFullCallback, BacktraceErrorCallback, &bt);
+  //
+  // std::ostringstream s;
+  // s << "Stack trace:\n";
+  // for (size_t i = 0; i < bt.lines.size(); i++) {
+  //   s << "  " << i << ": " << bt.lines[i] << "\n";
+  // }
+  //
+  // return s.str();
+  //
 }
 }  // namespace runtime
 }  // namespace tvm

@@ -39,7 +39,7 @@ TEST(Simplify, Mul) {
   auto x = tvm::te::var("x");
   auto e = (x * x) - (x * x);
   auto es = ana.canonical_simplify(e);
-  ICHECK(tvm::tir::is_zero(es));
+  ICHECK(tvm::tir::is_zero(es + 1));
 }
 
 TEST(Simplify, Mod) {

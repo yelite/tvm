@@ -255,7 +255,9 @@ class LiteralDoc : public ExprDoc {
    * \brief Create a LiteralDoc to represent integer.
    * \param v The integer value.
    */
-  static LiteralDoc Int(int64_t v) { return LiteralDoc(IntImm(DataType::Int(64), v)); }
+  static LiteralDoc Int(int64_t v) { 
+    ICHECK(false);
+      return LiteralDoc(IntImm(DataType::Int(64), v)); }
   /*!
    * \brief Create a LiteralDoc to represent boolean.
    * \param v The boolean value.
