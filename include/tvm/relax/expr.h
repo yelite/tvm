@@ -944,6 +944,12 @@ constexpr const char* kPrimitive = "Primitive";
 constexpr const char* kCodegen = "Codegen";
 /*! \brief Treat the function as a composite operator. */
 constexpr const char* kComposite = "Composite";
+/*!
+ * \brief Indicate the array of expr which are matched by arg patterns.
+ * This attr controls the params of the fused function, and it will be removed
+ * from the attrs of the fused function.
+ */
+constexpr const char* kMatchedParams = "MatchedParams";
 /*! \brief Indicate the function was created by the Pattern Partitioning Pass. */
 constexpr const char* kPartitionedFromPattern = "PartitionedFromPattern";
 }  // namespace attr

@@ -205,7 +205,9 @@ TVM_DLL Pass FuseOps(int fuse_opt_level = -1);
  * \return The Pass.
  */
 TVM_DLL Pass FuseOpsByPattern(const tvm::Array<runtime::String>& pattern_names,
-                              const tvm::Array<DFPattern>& patterns, bool annotate_codegen = false);
+                              const tvm::Array<DFPattern>& patterns,
+                              const tvm::Array<Optional<tvm::Array<DFPattern>>>& param_patterns,
+                              bool annotate_codegen = false);
 
 /*!
  * \brief Group one or multiple composite functions created by FuseOpsByPattern into a new

@@ -19,11 +19,15 @@
 import functools
 import inspect
 import types
-from typing import Callable, Dict, Union, Optional, List, Tuple
+from itertools import zip_longest
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np  # type: ignore
 
 import tvm.ir
+from tvm.relax.dpl import DFPattern
 from tvm.runtime import NDArray
+
 from . import _ffi_api
 
 
@@ -322,7 +326,8 @@ def FuseOps(fuse_opt_level=-1) -> tvm.ir.transform.Pass:
 
 
 def FuseOpsByPattern(
-    patterns: List[Tuple], annotate_codegen: bool = False
+    patterns: List[Union[Tuple[str, DFPattern], Tuple[str, DFPattern, List[DFPattern]]]],
+    annotate_codegen: bool = False,
 ) -> tvm.ir.transform.Pass:
     """Apply pattern matching to each function in the given module, and group matched expressions
     into a new function.
@@ -331,11 +336,17 @@ def FuseOpsByPattern(
 
     Parameters
     ----------
-    patterns : List[Tuple[str, DFPattern]]
+    patterns : List[Union[Tuple[str, DFPattern], Tuple[str, DFPattern, List[DFPattern]]]]
         The patterns to detect. The order of the patterns determines the order of priority in which
         they are matched. Higher-priority patterns should come earlier in the list.
         The string is the name of the corresponding pattern. It becomes the value of the kComposite
         attribute of a fused function after a successful matching.
+
+        An optional param patterns List[DFPattern] can be provided as the third element in the tuple
+        for each pattern. If provided, the fused function will have params exactly as the expressions
+        matched by param patterns, and in the same order. The param pattern must be part of the
+        main pattern (the second element of the tuple). If not provided, the order of fused function
+        params will be the order of bindings which uses those params.
 
     annotate_codegen : bool
         If True, wrap each created composite function with another function, whose body consists
@@ -352,8 +363,13 @@ def FuseOpsByPattern(
         The registered pass for pattern-based fusion.
 
     """
-    pattern_names, df_patterns = zip(*patterns)
-    return _ffi_api.FuseOpsByPattern(pattern_names, df_patterns, annotate_codegen)  # type: ignore
+    # Normalize the inputs to be Tuple[str, DFPattern, Optional[List[DFPattern]]]
+    pattern_names, df_patterns, *rest = zip_longest(*patterns)
+    if rest:
+        param_patterns = rest[0]
+    else:
+        param_patterns = [None] * len(pattern_names)
+    return _ffi_api.FuseOpsByPattern(pattern_names, df_patterns, param_patterns, annotate_codegen)  # type: ignore
 
 
 def MergeCompositeFunctions() -> tvm.ir.transform.Pass:

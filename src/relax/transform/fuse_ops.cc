@@ -39,6 +39,7 @@
 #include <unordered_map>
 
 #include "../../support/arena.h"
+#include "tvm/runtime/logging.h"
 #include "utils.h"
 
 namespace tvm {
@@ -357,7 +358,13 @@ class GraphCreator : public ExprVisitor {
  */
 class FunctionCreator : public ExprMutator {
  public:
-  explicit FunctionCreator(bool lift_constant) : lift_constant_(lift_constant) {}
+  explicit FunctionCreator(bool lift_constant, Optional<Array<Expr>> requested_params)
+      : requested_params_(requested_params), lift_constant_(lift_constant) {
+    ICHECK(!lift_constant || !requested_params.defined())
+        << "lift_constant and requested_params cannot be used at the same time. Please add the "
+           "constant to be lifted to the requested_params if explcit control of the function "
+           "params is needed.";
+  }
   /*!
    * \brief Append a new binding to this function and possibly create new parameters for the
    * function accordingly
@@ -460,7 +467,9 @@ class FunctionCreator : public ExprMutator {
     Expr body = outputs.size() == 1 ? outputs[0] : Tuple(outputs);
     body = builder_->Normalize(body);
     body = builder_->Normalize(SeqExpr({new_block}, body));
+    ReorderParams();
     group_attrs.Set(tvm::relax::attr::kPrimitive, Integer(1));
+    group_attrs.erase(attr::kMatchedParams);
     function_ = Function(/*params=*/params_,           //
                          /*body=*/body,                //
                          /*ret_struct_info=*/NullOpt,  //
@@ -516,6 +525,28 @@ class FunctionCreator : public ExprMutator {
     }
   }
 
+  void ReorderParams() {
+    if (!requested_params_.defined()) {
+      return;
+    }
+    const Array<Expr> requested_params = requested_params_.value();
+
+    Array<Var> reordered_params;
+    Array<Expr> reordered_arguments;
+    reordered_arguments.reserve(requested_params.size());
+    reordered_arguments.reserve(requested_params.size());
+
+    for (const auto& p : requested_params_.value()) {
+      auto it = std::find(arguments_.begin(), arguments_.end(), p);
+      ICHECK(it != arguments_.end()) << "Cannot find requested params.";
+      reordered_params.push_back(params_[it - arguments_.begin()]);
+      reordered_arguments.push_back(arguments_[it - arguments_.begin()]);
+    }
+
+    params_ = reordered_params;
+    arguments_ = reordered_arguments;
+  }
+
   Expr VisitExpr(const Expr& expr) final {
     // If the expression serves as an argument, return its correspondng parameter.
     auto it = std::find(arguments_.begin(), arguments_.end(), expr);
@@ -533,6 +564,11 @@ class FunctionCreator : public ExprMutator {
   int n_param_for_const_ = 0;
   /*! \brief The output vars */
   std::vector<const VarNode*> output_vars_;
+  /*!
+   * \brief The requested params controls the list of params of the function to be created.
+   * The function creation will fail if the list of params cannot be satisfied.
+   */
+  Optional<Array<Expr>> requested_params_;
   /*! \brief Whether or not to lift bound constants to parameters */
   bool lift_constant_;
 };
@@ -730,7 +766,9 @@ class OperatorFusor : public ExprMutator {
       // Add the binding to the grouped function it's in, and update the function information
       // accordingly.
       if (!group2func_.count(group)) {
-        group2func_.emplace(group, lift_constants_);
+        auto matched_params =
+            Downcast<Optional<Array<Expr>>>(group->attrs.Get(attr::kMatchedParams));
+        group2func_.emplace(group, FunctionCreator{lift_constants_, matched_params});
       }
       group2func_.find(group)->second.AppendBinding(binding);
     }
@@ -907,8 +945,9 @@ class PatternBasedPartitioner : ExprVisitor {
   using GroupMap = OperatorFusor::GroupMap;
   using ExprVisitor::VisitExpr_;
 
-  static GroupMap Run(String pattern_name, DFPattern pattern, Expr expr, support::Arena* arena) {
-    PatternBasedPartitioner part(pattern_name, pattern, AnalyzeVar2Value(expr));
+  static GroupMap Run(String pattern_name, DFPattern pattern,
+                      Optional<Array<DFPattern>> param_patterns, Expr expr, support::Arena* arena) {
+    PatternBasedPartitioner part(pattern_name, pattern, param_patterns, AnalyzeVar2Value(expr));
     // Initialize each expr to have its own group
     PostOrderVisit(
         expr, [arena, &part](const Expr& e) { part.group_map_[e.get()] = arena->make<Group>(); });
@@ -916,9 +955,11 @@ class PatternBasedPartitioner : ExprVisitor {
     return part.group_map_;
   }
 
-  PatternBasedPartitioner(String pattern_name, DFPattern pattern, const Map<Var, Expr>& bindings)
+  PatternBasedPartitioner(String pattern_name, DFPattern pattern,
+                          Optional<Array<DFPattern>> param_patterns, const Map<Var, Expr>& bindings)
       : pat_name_(pattern_name),
         pat_(pattern),
+        param_pat_(param_patterns),
         bindings_(bindings),
         value_to_bound_var_(GetBindingInverse(bindings)) {}
 
@@ -951,6 +992,7 @@ class PatternBasedPartitioner : ExprVisitor {
           AddToGroup(value_to_bound_var_[match], parent_group);
         }
       }
+      SetMatchedParams(parent_group, matches_opt.value());
     }
   }
 
@@ -963,6 +1005,21 @@ class PatternBasedPartitioner : ExprVisitor {
     }
   }
 
+  void SetMatchedParams(Group* root_group, const Map<DFPattern, Expr>& matched_expr) {
+    if (!param_pat_.defined()) {
+      return;
+    }
+    ICHECK(root_group->FindRoot() == root_group)
+        << "MachedParams can only be set on the root group.";
+
+    Array<Expr> params = param_pat_.value().Map([&](DFPattern param_pat) {
+      ICHECK(matched_expr.count(param_pat))
+          << "Param pattern not found in the pattern match result.";
+      return matched_expr[param_pat];
+    });
+    root_group->attrs.Set(attr::kMatchedParams, params);
+  }
+
   Group* GetGroupForBoundVar(Expr e) {
     ICHECK(value_to_bound_var_.count(e));
     auto bound_var = value_to_bound_var_[e];
@@ -972,6 +1029,7 @@ class PatternBasedPartitioner : ExprVisitor {
 
   String pat_name_;
   DFPattern pat_;
+  Optional<Array<DFPattern>> param_pat_;
   Map<Var, Expr> bindings_;
   Map<Expr, Var> value_to_bound_var_;
   GroupMap group_map_;
@@ -1048,13 +1106,15 @@ class CompositeFunctionAnnotator : public ExprMutator {
 };
 
 IRModule FuseOpsByPattern(const tvm::Array<String>& pattern_names,
-                          const tvm::Array<DFPattern>& patterns, IRModule mod,
-                          bool annotate_codegen) {
+                          const tvm::Array<DFPattern>& patterns,
+                          const tvm::Array<Optional<tvm::Array<DFPattern>>>& param_patterns,
+                          IRModule mod, bool annotate_codegen) {
   support::Arena arena;
   for (size_t i = 0; i < pattern_names.size(); ++i) {
     OperatorFusor::GroupMap group_map;
     for (const auto& entry : mod->functions) {
-      auto map = PatternBasedPartitioner::Run(pattern_names[i], patterns[i], entry.second, &arena);
+      auto map = PatternBasedPartitioner::Run(pattern_names[i], patterns[i], param_patterns[i],
+                                              entry.second, &arena);
       group_map.insert(map.begin(), map.end());
     }
     mod = MakeGroupedFunctions(mod, group_map, /*lift_constants*/ false);
@@ -1083,10 +1143,13 @@ Pass FuseOps(int fuse_opt_level) {
 TVM_REGISTER_GLOBAL("relax.transform.FuseOps").set_body_typed(FuseOps);
 
 Pass FuseOpsByPattern(const tvm::Array<String>& pattern_names,
-                      const tvm::Array<DFPattern>& patterns, bool annotate_codegen) {
+                      const tvm::Array<DFPattern>& patterns,
+                      const tvm::Array<Optional<tvm::Array<DFPattern>>>& param_patterns,
+                      bool annotate_codegen) {
   runtime::TypedPackedFunc<IRModule(IRModule, PassContext)> pass_func =  //
       [=](IRModule m, PassContext pc) {
-        return relax::FuseOpsByPattern(pattern_names, patterns, m, annotate_codegen);
+        return relax::FuseOpsByPattern(pattern_names, patterns, param_patterns, m,
+                                       annotate_codegen);
       };
   return CreateModulePass(/*pass_function=*/pass_func,       //
                           /*opt_level=*/0,                   //
