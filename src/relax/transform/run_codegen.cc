@@ -89,7 +89,7 @@ class CodeGenRunner : ExprMutator {
         return create_call_dps_packed(it->second.first, it->second.second);
       } else {
         // TODO(@sunggg): Is there any better way to get this func?
-        Function func = Downcast<Function>(builder_->GetContextIRModule()->Lookup(gvar));
+        Function func = Downcast<Function>(builder_->GetContextIRModule()->Lookup(gvar->name_hint));
         Expr new_func = VisitExpr(func);
 
         if (new_func->IsInstance<ExternFuncNode>()) {
