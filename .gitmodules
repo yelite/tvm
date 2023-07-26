@@ -25,3 +25,6 @@
 [submodule "3rdparty/cutlass_fpA_intB_gemm"]
 	path = 3rdparty/cutlass_fpA_intB_gemm
 	url = https://github.com/tlc-pack/cutlass_fpA_intB_gemm
+[submodule "3rdparty/exllama-cuda-kernels"]
+	path = 3rdparty/exllama-cuda-kernels
+	url = https://github.com/yelite/exllama-cuda-kernels.git
