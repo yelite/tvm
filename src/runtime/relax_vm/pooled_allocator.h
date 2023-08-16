@@ -26,6 +26,7 @@
 #include <tvm/runtime/device_api.h>
 #include <tvm/runtime/relax_vm/memory_manager.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
@@ -52,8 +53,22 @@ class PooledAllocator final : public Allocator {
       auto&& pool = it->second;
       auto ret = pool.back();
       pool.pop_back();
+      auto it2 = free_sizes_.find(size);
+      ICHECK(it2 != free_sizes_.end());
+      free_sizes_.erase(it2);
       return ret;
     }
+
+    if (auto it = std::lower_bound(free_sizes_.begin(), free_sizes_.end(), size);
+        it != free_sizes_.end()) {
+      auto&& pool = memory_pool_[*it];
+      auto ret = pool.back();
+      ICHECK(ret.size > 0);
+      pool.pop_back();
+      free_sizes_.erase(it);
+      return ret;
+    }
+
     Buffer buf;
     buf.device = device_;
     buf.size = size;
@@ -79,8 +94,11 @@ class PooledAllocator final : public Allocator {
       memory_pool_.emplace(buffer.size, std::vector<Buffer>{});
     }
     memory_pool_.at(buffer.size).push_back(buffer);
+    free_sizes_.insert(buffer.size);
     DLOG(INFO) << "reclaim buffer " << buffer.size;
   }
+
+  int GetUsedMemory() const override { return used_memory_; }
 
  private:
   void ReleaseAll() {
@@ -101,6 +119,7 @@ class PooledAllocator final : public Allocator {
   std::atomic<size_t> used_memory_;
   std::unordered_map<size_t, std::vector<Buffer> > memory_pool_;
   std::recursive_mutex mu_;
+  std::multiset<size_t> free_sizes_;
   Device device_;
 };
 

@@ -174,6 +174,12 @@ void MemoryManager::Clear() {
   m->allocators_.clear();
 }
 
+int MemoryManager::GetUsedMemory(Device dev) {
+  MemoryManager* m = MemoryManager::Global();
+  std::lock_guard<std::mutex> lock(m->mutex_);
+  return m->allocators_.at(dev)->GetUsedMemory();
+}
+
 Buffer Allocator::Alloc(ShapeTuple shape, DLDataType dtype, String mem_scope) {
   ICHECK_EQ(shape.size(), 1) << "Allocator of type (" << type_
                              << ") does not support nD allocation. Please use allocator type ("
@@ -208,6 +214,9 @@ runtime::NDArray Allocator::Empty(ShapeTuple shape, DLDataType dtype, DLDevice d
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.memory_manager.clear").set_body_typed(MemoryManager::Clear);
+
+TVM_REGISTER_GLOBAL("vm.memory_manager.get_used_memory")
+    .set_body_typed(MemoryManager::GetUsedMemory);
 
 }  // namespace relax_vm
 }  // namespace runtime
