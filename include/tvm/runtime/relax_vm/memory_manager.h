@@ -83,6 +83,8 @@ class Allocator {
    */
   virtual void Free(const Buffer& buffer) = 0;
 
+  virtual int GetUsedMemory() const { return 0;}
+
  private:
   AllocatorType type_;
 };
@@ -106,6 +108,8 @@ class MemoryManager {
 
   /*! \brief Clear the allocators. */
   static void Clear();
+
+  static int GetUsedMemory(Device dev);
 
  private:
   MemoryManager() {}
