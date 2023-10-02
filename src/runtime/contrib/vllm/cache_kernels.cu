@@ -3,6 +3,10 @@
 #include <map>
 #include <vector>
 
+#include <tvm/runtime/ndarray.h>
+#include <tvm/runtime/packed_func.h>
+#include <tvm/runtime/registry.h>
+
 namespace vllm {
 
 template<typename scalar_t>
@@ -48,3 +52,39 @@ __global__ void reshape_and_cache_kernel(
 }
 
 } // namespace vllm
+
+namespace tvm {
+namespace runtime {
+
+TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reshape_and_cache")
+    .set_body_typed([](const DLTensor* key, const DLTensor* value, DLTensor* key_cache,
+		       DLTensor* value_cache, const DLTensor* slot_mapping) {
+      int num_tokens = key->shape[0];
+      int num_heads = key->shape[1];
+      int head_size = key->shape[2];
+      int block_size = key_cache->shape[3];
+      int vec_size = key_cache->shape[4];
+
+      int key_stride = key->strides[0];
+      int value_stride = value->strides[0];
+
+      dim3 grid(num_tokens);
+      dim3 block(std::min(num_heads * head_size, 512));
+
+      using scalar_t = uint16_t;
+      vllm::reshape_and_cache_kernel<scalar_t><<<grid, block>>>(
+	static_cast<const scalar_t*>(key->data),
+	static_cast<const scalar_t*>(value->data),
+	static_cast<scalar_t*>(key_cache->data),
+	static_cast<scalar_t*>(value_cache->data),
+	static_cast<const int*>(slot_mapping->data),
+        key_stride,
+        value_stride,
+        num_heads,
+        head_size,
+        block_size,
+        vec_size);
+    });
+
+}  // namespace runtime
+}  // namespace tvm
