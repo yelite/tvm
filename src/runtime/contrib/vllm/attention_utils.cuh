@@ -17,7 +17,7 @@
  */
 #pragma once
 
-#include "attention_float16.h"
+#include "dtype_float16.cuh"
 
 #include <float.h>
 #include <type_traits>

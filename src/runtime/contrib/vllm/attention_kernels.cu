@@ -15,10 +15,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "attention_float16.h"
+#include "dtype_float16.cuh"
 #include "attention_utils.cuh"
 
 #include <algorithm>
+
+#include <tvm/runtime/ndarray.h>
+#include <tvm/runtime/packed_func.h>
+#include <tvm/runtime/registry.h>
 
 #define WARP_SIZE 32
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -336,6 +340,135 @@ __global__ void single_query_cached_kv_attention_kernel(
 }
 
 } // namespace vllm
+
+namespace tvm {
+namespace runtime {
+
+#define LAUNCH_ATTENTION_KERNEL(T, HEAD_SIZE, BLOCK_SIZE, NUM_THREADS)                        \
+  cudaFuncSetAttribute(                                                                       \
+      vllm::single_query_cached_kv_attention_kernel<T, HEAD_SIZE, BLOCK_SIZE, NUM_THREADS>,   \
+      cudaFuncAttributeMaxDynamicSharedMemorySize, shared_mem_size);                          \
+  vllm::single_query_cached_kv_attention_kernel<T, HEAD_SIZE, BLOCK_SIZE, NUM_THREADS>        \
+  <<<grid, block, shared_mem_size>>>(                                                 \
+    out_ptr,                                                                                  \
+    query_ptr,                                                                                \
+    key_cache_ptr,                                                                            \
+    value_cache_ptr,                                                                          \
+    head_mapping_ptr,                                                                         \
+    scale,                                                                                    \
+    block_tables_ptr,                                                                         \
+    context_lens_ptr,                                                                         \
+    max_num_blocks_per_seq,                                                                   \
+    alibi_slopes_ptr,                                                                         \
+    q_stride,                                                                                 \
+    kv_block_stride,                                                                          \
+    kv_head_stride);
+
+
+template<
+  typename T,
+  int BLOCK_SIZE,
+  int NUM_THREADS = 128>
+void single_query_cached_kv_attention_launcher(
+                       DLTensor* out,
+		       const DLTensor* query,
+		       const DLTensor* key_cache,
+		       const DLTensor* value_cache,
+		       const DLTensor* head_mapping,
+		       float scale,
+		       const DLTensor* block_tables,
+       		       const DLTensor* context_lens,
+   	               int max_context_len) {
+  int num_seqs = query->shape[0];
+  int num_heads = query->shape[1];
+  int head_size = query->shape[2];
+  int max_num_blocks_per_seq = block_tables->shape[1];
+  int q_stride = query->strides[0];
+  int kv_block_stride = key_cache->strides[0];
+  int kv_head_stride = key_cache->strides[1];
+
+  // int thread_group_size = MAX(WARP_SIZE / BLOCK_SIZE, 1);
+  // assert(head_size % thread_group_size == 0);
+
+  const float* alibi_slopes_ptr = nullptr;
+
+  T* out_ptr = static_cast<T*>(out->data);
+  T* query_ptr = static_cast<T*>(query->data);
+  T* key_cache_ptr = static_cast<T*>(key_cache->data);
+  T* value_cache_ptr = static_cast<T*>(value_cache->data);
+  int* head_mapping_ptr = static_cast<int*>(head_mapping->data);
+  int* block_tables_ptr = static_cast<int*>(block_tables->data);
+  int* context_lens_ptr = static_cast<int*>(context_lens->data);
+
+  constexpr int NUM_WARPS = NUM_THREADS / WARP_SIZE;
+  int padded_max_context_len = ((max_context_len + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE;
+  int logits_size = padded_max_context_len * sizeof(float);
+  int outputs_size = (NUM_WARPS / 2) * head_size * sizeof(float);
+  int shared_mem_size = std::max(logits_size, outputs_size);
+
+  dim3 grid(num_heads, num_seqs);
+  dim3 block(NUM_THREADS);
+  switch (head_size) {
+    case 64:
+      LAUNCH_ATTENTION_KERNEL(T, 64, BLOCK_SIZE, NUM_THREADS);
+      break;
+    case 80:
+      LAUNCH_ATTENTION_KERNEL(T, 80, BLOCK_SIZE, NUM_THREADS);
+      break;
+    case 96:
+      LAUNCH_ATTENTION_KERNEL(T, 96, BLOCK_SIZE, NUM_THREADS);
+      break;
+    case 112:
+      LAUNCH_ATTENTION_KERNEL(T, 112, BLOCK_SIZE, NUM_THREADS);
+      break;
+    case 128:
+      LAUNCH_ATTENTION_KERNEL(T, 128, BLOCK_SIZE, NUM_THREADS);
+      break;
+    case 256:
+      LAUNCH_ATTENTION_KERNEL(T, 256, BLOCK_SIZE, NUM_THREADS);
+      break;
+    default:
+      // TORCH_CHECK(false, "Unsupported head size: ", head_size);
+      break;
+  }
+}
+
+#define CALL_KERNEL_LAUNCHER(BLOCK_SIZE)                           \
+  single_query_cached_kv_attention_launcher<uint16_t, BLOCK_SIZE>( \
+    out,                                                            \
+    query,                                                          \
+    key_cache,                                                      \
+    value_cache,                                                    \
+    head_mapping,                                                   \
+    scale,                                                          \
+    block_tables,                                                   \
+    context_lens,                                                   \
+    max_context_len);
+
+TVM_REGISTER_GLOBAL("tvm.contrib.vllm.single_query_cached_kv_attention")
+    .set_body_typed([](DLTensor* out,
+		       const DLTensor* query,
+		       const DLTensor* key_cache,
+		       const DLTensor* value_cache,
+		       const DLTensor* head_mapping,
+		       //		       float scale,
+		       const DLTensor* block_tables,
+       		       const DLTensor* context_lens,
+		       int block_size,
+		       int max_context_len) {
+		      float scale = 1.0;
+	if (block_size == 8) {
+	  CALL_KERNEL_LAUNCHER(8);
+	} // else if (block_size == 16) {
+	//   CALL_KERNEL_LAUNCHER(16);
+	// } else if (block_size == 32) {
+	//   CALL_KERNEL_LAUNCHER(32);
+	// } else {
+	//   // TORCH_CHECK(false, "Unsupported block size: ", block_size);
+	// }
+    });
+}  // namespace runtime
+}  // namespace tvm
 
 #undef WARP_SIZE
 #undef MAX

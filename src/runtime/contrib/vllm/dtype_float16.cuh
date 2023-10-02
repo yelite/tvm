@@ -19,6 +19,7 @@
 #pragma once
 
 #include "attention_generic.cuh"
+#include "dtype_float32.cuh"
 
 #include <stdint.h>
 
