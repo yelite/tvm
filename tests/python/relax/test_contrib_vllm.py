@@ -14,6 +14,44 @@ def to_torch(arr):
 
 
 def test_attention():
+    @I.ir_module
+    class Module:
+        @R.function
+        def main(
+            query: R.Tensor(("num_seqs", 128, 32), dtype="float16"),
+            key_cache: R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
+            value_cache: R.Tensor(("num_tokens", 128, 32, 16), dtype="float16"),
+            head_mapping: R.Tensor((128,), dtype="int32"),
+            block_tables: R.Tensor(("num_seqs", 128), dtype="int32"),
+            context_lens: R.Tensor(("num_seqs",), dtype="int32"),
+        ) -> R.Tuple(
+            [
+                R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
+                R.Tensor(("num_tokens", 128, 32, 16), dtype="float16"),
+            ]
+        ):
+            with R.dataflow():
+                max_len = R.max(context_lens)
+                out = R.call_dps_packed(
+                    "tvm.contrib.vllm.single_query_cached_kv_attention",
+                    [
+                        query,
+                        key_cache,
+                        value_cache,
+                        head_mapping,
+                        block_tables,
+                        context_lens,
+                        16,
+                        max_len,
+                    ],
+                    out_sinfo=query.struct_info,
+                )
+                R.output(out)
+            return out
+
+    print(Module)
+    return
+
     scale = 0.125
     block_size = 16
     max_context_len = 21
@@ -49,6 +87,38 @@ def test_attention():
 
 
 def test_cache():
+    @I.ir_module
+    class Module:
+        @R.function
+        def main(
+            key: R.Tensor(("num_tokens", 128, 32), dtype="float16"),
+            value: R.Tensor(("num_tokens", 128, 32), dtype="float16"),
+            key_cache: R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
+            value_cache: R.Tensor(("num_blocks", 128, 32, 16), dtype="float16"),
+            slot_mapping: R.Tensor(("num_tokens",), dtype="int32"),
+        ) -> R.Tuple(
+            [
+                R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
+                R.Tensor(("num_blocks", 128, 32, 16), dtype="float16"),
+            ]
+        ):
+            _ = R.call_packed(
+                "tvm.contrib.vllm.reshape_and_cache",
+                key,
+                value,
+                key_cache,
+                value_cache,
+                slot_mapping,
+                sinfo_args=[R.Tuple()],
+            )
+            with R.dataflow():
+                out = (key_cache, value_cache)
+                R.output(out)
+            return out
+
+    print(Module)
+    return
+
     key_to_cache = to_torch(np.load("vllm_cache_inputs/key_to_cache.npy"))
     value_to_cache = to_torch(np.load("vllm_cache_inputs/value_to_cache.npy"))
 
@@ -73,4 +143,4 @@ def test_cache():
     print(np.max(np.abs(value_cache_after - value_cache.cpu().numpy())))
 
 
-test_cache()
+test_attention()

@@ -446,25 +446,25 @@ void single_query_cached_kv_attention_launcher(
     max_context_len);
 
 TVM_REGISTER_GLOBAL("tvm.contrib.vllm.single_query_cached_kv_attention")
-    .set_body_typed([](DLTensor* out,
-		       const DLTensor* query,
+    .set_body_typed([](const DLTensor* query,
 		       const DLTensor* key_cache,
 		       const DLTensor* value_cache,
 		       const DLTensor* head_mapping,
 		       const DLTensor* block_tables,
        		       const DLTensor* context_lens,
 		       int block_size,
-		       int max_context_len) {
+		       int max_context_len,
+		       DLTensor* out) {
         float scale = 1.0 / sqrt(query->shape[2]);
 	if (block_size == 8) {
 	  CALL_KERNEL_LAUNCHER(8);
-	} // else if (block_size == 16) {
-	//   CALL_KERNEL_LAUNCHER(16);
-	// } else if (block_size == 32) {
-	//   CALL_KERNEL_LAUNCHER(32);
-	// } else {
-	//   // TORCH_CHECK(false, "Unsupported block size: ", block_size);
-	// }
+	} else if (block_size == 16) {
+	  CALL_KERNEL_LAUNCHER(16);
+	} else if (block_size == 32) {
+	  CALL_KERNEL_LAUNCHER(32);
+	} else {
+	  // TORCH_CHECK(false, "Unsupported block size: ", block_size);
+	}
     });
 }  // namespace runtime
 }  // namespace tvm
