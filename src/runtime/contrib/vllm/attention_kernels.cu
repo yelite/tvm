@@ -451,12 +451,11 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.single_query_cached_kv_attention")
 		       const DLTensor* key_cache,
 		       const DLTensor* value_cache,
 		       const DLTensor* head_mapping,
-		       //		       float scale,
 		       const DLTensor* block_tables,
        		       const DLTensor* context_lens,
 		       int block_size,
 		       int max_context_len) {
-		      float scale = 1.0;
+        float scale = 1.0 / sqrt(query->shape[2]);
 	if (block_size == 8) {
 	  CALL_KERNEL_LAUNCHER(8);
 	} // else if (block_size == 16) {
