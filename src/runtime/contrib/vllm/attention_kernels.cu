@@ -383,13 +383,13 @@ void single_query_cached_kv_attention_launcher(
   int num_heads = query->shape[1];
   int head_size = query->shape[2];
   int max_num_blocks_per_seq = block_tables->shape[1];
-  int q_stride = query->strides[0];
-  int kv_block_stride = key_cache->strides[0];
-  int kv_head_stride = key_cache->strides[1];
+  int q_stride = query->shape[1] * query->shape[2];
+
+  int kv_head_stride = key_cache->shape[2] * key_cache->shape[3] * key_cache->shape[4];
+  int kv_block_stride = kv_head_stride * key_cache->shape[1];
 
   // int thread_group_size = MAX(WARP_SIZE / BLOCK_SIZE, 1);
   // assert(head_size % thread_group_size == 0);
-
   const float* alibi_slopes_ptr = nullptr;
 
   T* out_ptr = static_cast<T*>(out->data);
@@ -453,9 +453,13 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.single_query_cached_kv_attention")
 		       const DLTensor* block_tables,
        		       const DLTensor* context_lens,
 		       int block_size,
-		       int max_context_len,
+		       const DLTensor* max_context_len_tensor, // TODO: pass integer
 		       DLTensor* out) {
         float scale = 1.0 / sqrt(query->shape[2]);
+	int max_context_len;
+	cudaMemcpy(&max_context_len, (int*)max_context_len_tensor->data, sizeof(int),
+		   cudaMemcpyDeviceToHost);
+
 	if (block_size == 8) {
 	  CALL_KERNEL_LAUNCHER(8);
 	} else if (block_size == 16) {

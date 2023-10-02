@@ -13,23 +13,36 @@ def to_torch(arr):
     return torch.from_numpy(arr).to("cuda")
 
 
+def build_and_run(mod, inputs_np, target, legalize=True):
+    if legalize:
+        mod = relax.transform.LegalizeOps()(mod)
+
+        with tvm.target.Target("cuda"):
+            mod = tvm.tir.transform.DefaultGPUSchedule()(mod)
+
+    with tvm.transform.PassContext():
+        ex = relax.build(mod, target)
+
+    dev = tvm.device(target, 0)
+    vm = relax.VirtualMachine(ex, dev)
+    f = vm["main"]
+    inputs = [tvm.nd.array(inp, dev) for inp in inputs_np]
+
+    return f(*inputs).numpy()
+
+
 def test_attention():
     @I.ir_module
     class Module:
         @R.function
         def main(
-            query: R.Tensor(("num_seqs", 128, 32), dtype="float16"),
-            key_cache: R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
-            value_cache: R.Tensor(("num_tokens", 128, 32, 16), dtype="float16"),
-            head_mapping: R.Tensor((128,), dtype="int32"),
-            block_tables: R.Tensor(("num_seqs", 128), dtype="int32"),
+            query: R.Tensor(("num_seqs", 12, 64), dtype="float16"),
+            key_cache: R.Tensor(("num_blocks", 12, 8, 16, 8), dtype="float16"),
+            value_cache: R.Tensor(("num_blocks", 12, 64, 16), dtype="float16"),
+            head_mapping: R.Tensor((12,), dtype="int32"),
+            block_tables: R.Tensor(("num_seqs", "max_num_blocks_per_seq"), dtype="int32"),
             context_lens: R.Tensor(("num_seqs",), dtype="int32"),
-        ) -> R.Tuple(
-            [
-                R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
-                R.Tensor(("num_tokens", 128, 32, 16), dtype="float16"),
-            ]
-        ):
+        ) -> R.Tensor(("num_seqs", 12, 64), dtype="float16"):
             with R.dataflow():
                 max_len = R.max(context_lens)
                 out = R.call_dps_packed(
@@ -49,9 +62,6 @@ def test_attention():
                 R.output(out)
             return out
 
-    print(Module)
-    return
-
     scale = 0.125
     block_size = 16
     max_context_len = 21
@@ -63,7 +73,11 @@ def test_attention():
     head_mapping = np.load("vllm_attention_inputs/head_mapping.npy")
     context_lens = np.load("vllm_attention_inputs/context_lens.npy")
 
+    out = build_and_run(Module, [query, key_cache, value_cache, head_mapping, block_tables, context_lens], "cuda", legalize=True)
     ref = np.load("vllm_attention_inputs/output.npy")
+
+    print(np.abs(np.max(out - ref)))
+    return
 
     output = to_torch(np.zeros_like(ref))
 
