@@ -62,10 +62,6 @@ def test_attention():
                 R.output(out)
             return out
 
-    scale = 0.125
-    block_size = 16
-    max_context_len = 21
-
     query = np.load("vllm_attention_inputs/query.npy")
     key_cache = np.load("vllm_attention_inputs/key_cache.npy")
     value_cache = np.load("vllm_attention_inputs/value_cache.npy")
@@ -73,31 +69,32 @@ def test_attention():
     head_mapping = np.load("vllm_attention_inputs/head_mapping.npy")
     context_lens = np.load("vllm_attention_inputs/context_lens.npy")
 
-    out = build_and_run(Module, [query, key_cache, value_cache, head_mapping, block_tables, context_lens], "cuda", legalize=True)
-    ref = np.load("vllm_attention_inputs/output.npy")
+    out = build_and_run(
+        Module,
+        [query, key_cache, value_cache, head_mapping, block_tables, context_lens],
+        "cuda",
+        legalize=True,
+    )
 
-    print(np.abs(np.max(out - ref)))
-    return
-
-    output = to_torch(np.zeros_like(ref))
+    ref = to_torch(np.zeros_like(query))
 
     from vllm import attention_ops
 
     attention_ops.single_query_cached_kv_attention(
-        output,
+        ref,
         to_torch(query),
         to_torch(key_cache),
         to_torch(value_cache),
         to_torch(head_mapping),
-        scale,
+        query.shape[-1] ** -0.5, # scale
         to_torch(block_tables),
         to_torch(context_lens),
-        block_size,
-        max_context_len,
-        None,  # alibi_slopes
+        value_cache.shape[-1], # block_size,
+        np.max(context_lens),
+        None,
     )
 
-    print(np.max(np.abs(ref - output.cpu().numpy())))
+    assert np.max(np.abs(ref.cpu().numpy() - out)) == 0.0
 
 
 def test_cache():
