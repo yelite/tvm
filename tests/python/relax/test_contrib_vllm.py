@@ -28,7 +28,12 @@ def build_and_run(mod, inputs_np, target, legalize=True):
     f = vm["main"]
     inputs = [tvm.nd.array(inp, dev) for inp in inputs_np]
 
-    return f(*inputs).numpy()
+    out = f(*inputs)
+
+    if isinstance(out, tvm.ir.container.Array):
+        return [arr.numpy() for arr in out]
+
+    return out.numpy()
 
 
 def test_attention():
@@ -86,10 +91,10 @@ def test_attention():
         to_torch(key_cache),
         to_torch(value_cache),
         to_torch(head_mapping),
-        query.shape[-1] ** -0.5, # scale
+        query.shape[-1] ** -0.5,  # scale
         to_torch(block_tables),
         to_torch(context_lens),
-        value_cache.shape[-1], # block_size,
+        value_cache.shape[-1],  # block_size,
         np.max(context_lens),
         None,
     )
@@ -102,15 +107,15 @@ def test_cache():
     class Module:
         @R.function
         def main(
-            key: R.Tensor(("num_tokens", 128, 32), dtype="float16"),
-            value: R.Tensor(("num_tokens", 128, 32), dtype="float16"),
-            key_cache: R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
-            value_cache: R.Tensor(("num_blocks", 128, 32, 16), dtype="float16"),
+            key: R.Tensor(("num_tokens", 12, 64), dtype="float16"),
+            value: R.Tensor(("num_tokens", 12, 64), dtype="float16"),
+            key_cache: R.Tensor(("num_blocks", 12, 8, 16, 8), dtype="float16"),
+            value_cache: R.Tensor(("num_blocks", 12, 64, 16), dtype="float16"),
             slot_mapping: R.Tensor(("num_tokens",), dtype="int32"),
         ) -> R.Tuple(
             [
-                R.Tensor(("num_blocks", 128, 2, 16, 16), dtype="float16"),
-                R.Tensor(("num_blocks", 128, 32, 16), dtype="float16"),
+                R.Tensor(("num_blocks", 12, 8, 16, 8), dtype="float16"),
+                R.Tensor(("num_blocks", 12, 64, 16), dtype="float16"),
             ]
         ):
             _ = R.call_packed(
@@ -127,31 +132,34 @@ def test_cache():
                 R.output(out)
             return out
 
-    print(Module)
-    return
+    key = np.load("vllm_cache_inputs/key_to_cache.npy")
+    value = np.load("vllm_cache_inputs/value_to_cache.npy")
 
-    key_to_cache = to_torch(np.load("vllm_cache_inputs/key_to_cache.npy"))
-    value_to_cache = to_torch(np.load("vllm_cache_inputs/value_to_cache.npy"))
+    key_cache = np.load("vllm_cache_inputs/key_cache_before.npy")
+    value_cache = np.load("vllm_cache_inputs/value_cache_before.npy")
+    slot_mapping = np.load("vllm_cache_inputs/slot_mapping.npy")
 
-    key_cache = to_torch(np.load("vllm_cache_inputs/key_cache_before.npy"))
-    value_cache = to_torch(np.load("vllm_cache_inputs/value_cache_before.npy"))
-    slot_mapping = to_torch(np.load("vllm_cache_inputs/slot_mapping.npy"))
+    out_key_cache, out_value_cache = build_and_run(
+        Module,
+        [key, value, key_cache, value_cache, slot_mapping],
+        "cuda",
+    )
 
     from vllm import cache_ops
 
+    key_cache = to_torch(np.load("vllm_cache_inputs/key_cache_before.npy"))
+    value_cache = to_torch(np.load("vllm_cache_inputs/value_cache_before.npy"))
+
     cache_ops.reshape_and_cache(
-        key_to_cache,
-        value_to_cache,
+        to_torch(key),
+        to_torch(value),
         key_cache,
         value_cache,
-        slot_mapping,
+        to_torch(slot_mapping),
     )
 
-    key_cache_after = np.load("vllm_cache_inputs/key_cache_after.npy")
-    value_cache_after = np.load("vllm_cache_inputs/value_cache_after.npy")
-
-    print(np.max(np.abs(key_cache_after - key_cache.cpu().numpy())))
-    print(np.max(np.abs(value_cache_after - value_cache.cpu().numpy())))
+    assert np.max(np.abs(out_key_cache - key_cache.cpu().numpy())) == 0
+    assert np.max(np.abs(out_value_cache - value_cache.cpu().numpy())) == 0
 
 
-test_attention()
+test_cache()

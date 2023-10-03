@@ -65,8 +65,8 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reshape_and_cache")
       int block_size = key_cache->shape[3];
       int vec_size = key_cache->shape[4];
 
-      int key_stride = key->strides[0];
-      int value_stride = value->strides[0];
+      int key_stride = key->shape[1] * key->shape[2];
+      int value_stride = value->shape[1] * value->shape[2];
 
       dim3 grid(num_tokens);
       dim3 block(std::min(num_heads * head_size, 512));
