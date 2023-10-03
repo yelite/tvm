@@ -57,8 +57,8 @@ namespace tvm {
 namespace runtime {
 
 TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reshape_and_cache")
-    .set_body_typed([](const DLTensor* key, const DLTensor* value, DLTensor* key_cache,
-		       DLTensor* value_cache, const DLTensor* slot_mapping) {
+    .set_body_typed([](NDArray key, NDArray value, NDArray key_cache,
+		       NDArray value_cache, NDArray slot_mapping) {
       int num_tokens = key->shape[0];
       int num_heads = key->shape[1];
       int head_size = key->shape[2];
@@ -84,7 +84,8 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reshape_and_cache")
         head_size,
         block_size,
         vec_size);
-    });
 
+      return Array({key_cache, value_cache});
+    });
 }  // namespace runtime
 }  // namespace tvm

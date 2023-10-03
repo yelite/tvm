@@ -118,17 +118,13 @@ def test_cache():
                 R.Tensor(("num_blocks", 12, 64, 16), dtype="float16"),
             ]
         ):
-            _ = R.call_packed(
-                "tvm.contrib.vllm.reshape_and_cache",
-                key,
-                value,
-                key_cache,
-                value_cache,
-                slot_mapping,
-                sinfo_args=[R.Tuple()],
-            )
             with R.dataflow():
-                out = (key_cache, value_cache)
+                kv = R.call_pure_packed(
+                    "tvm.contrib.vllm.reshape_and_cache",
+                    key, value, key_cache, value_cache, slot_mapping,
+                    sinfo_args=[key_cache.struct_info, value_cache.struct_info]
+                )
+                out = (kv[0], kv[1])
                 R.output(out)
             return out
 
