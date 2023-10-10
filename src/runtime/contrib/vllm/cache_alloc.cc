@@ -16,22 +16,24 @@
  * specific language governing permissions and limitations
  * under the License.
  */
+#include <cuda_runtime.h>
 #include <tvm/runtime/ndarray.h>
 #include <tvm/runtime/registry.h>
-
-#include "tvm/runtime/data_type.h"
 
 namespace tvm {
 namespace runtime {
 namespace vllm {
 
-Array<NDArray> AllocateKVCache(int head_size, int num_layers, int num_heads,
-                                               int block_size, int num_blocks) {
+Array<NDArray> AllocateKVCache(int head_size, int num_layers, int num_heads, int block_size,
+                               int num_blocks) {
   Array<NDArray> cache;
   int element_size = 2;
   int vec_size = 16 / element_size;
 
-  DLDevice dev{DLDeviceType::kDLCUDA, 0};
+  int device_id;
+  cudaGetDevice(&device_id);
+
+  DLDevice dev{DLDeviceType::kDLCUDA, device_id};
 
   for (int i = 0; i < num_layers; ++i) {
     NDArray key_blocks =
