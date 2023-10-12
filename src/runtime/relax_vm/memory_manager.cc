@@ -177,7 +177,13 @@ void MemoryManager::Clear() {
 int MemoryManager::GetUsedMemory(Device dev) {
   MemoryManager* m = MemoryManager::Global();
   std::lock_guard<std::mutex> lock(m->mutex_);
-  return m->allocators_.at(dev)->GetUsedMemory();
+  if (m->allocators_.count(dev)) {
+    return m->allocators_.at(dev)->GetUsedMemory();
+  }
+  // For Disco, all devices will be queried with the same `dev`. When the device ID of the
+  // queried device is different from the one used by this VM instance, we cannot return
+  // a meaningful value.
+  return 0;
 }
 
 Buffer Allocator::Alloc(ShapeTuple shape, DLDataType dtype, String mem_scope) {
