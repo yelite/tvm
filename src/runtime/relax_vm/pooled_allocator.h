@@ -98,7 +98,7 @@ class PooledAllocator final : public Allocator {
     DLOG(INFO) << "reclaim buffer " << buffer.size;
   }
 
-  int GetUsedMemory() const override { return used_memory_; }
+  int64_t GetUsedMemory() const override { return static_cast<int64_t>(used_memory_); }
 
  private:
   void ReleaseAll() {

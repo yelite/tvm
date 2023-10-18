@@ -174,11 +174,11 @@ void MemoryManager::Clear() {
   m->allocators_.clear();
 }
 
-int MemoryManager::GetUsedMemory(Device dev) {
+int64_t MemoryManager::GetUsedMemory(Device dev) {
   MemoryManager* m = MemoryManager::Global();
   std::lock_guard<std::mutex> lock(m->mutex_);
   if (m->allocators_.count(dev)) {
-    return m->allocators_.at(dev)->GetUsedMemory();
+    return m->allocators_.at(dev)->GetUsedMemory();;
   }
   // For Disco, all devices will be queried with the same `dev`. When the device ID of the
   // queried device is different from the one used by this VM instance, we cannot return

@@ -27,6 +27,7 @@
 #include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/ndarray.h>
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -83,7 +84,7 @@ class Allocator {
    */
   virtual void Free(const Buffer& buffer) = 0;
 
-  virtual int GetUsedMemory() const { return 0;}
+  virtual int64_t GetUsedMemory() const { return 0;}
 
  private:
   AllocatorType type_;
@@ -109,7 +110,7 @@ class MemoryManager {
   /*! \brief Clear the allocators. */
   static void Clear();
 
-  static int GetUsedMemory(Device dev);
+  static int64_t GetUsedMemory(Device dev);
 
  private:
   MemoryManager() {}
