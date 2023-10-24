@@ -31,7 +31,7 @@ struct BcastSessionObj::Internal {
   template <typename... Args>
   static void TVM_ALWAYS_INLINE BroadcastUnpacked(BcastSessionObj* self, DiscoAction action,
                                                   int64_t reg_id, Args&&... args) {
-    LOG(INFO) << "Sending action: " << DiscoAction2String(action) << " reg: " << reg_id;
+    LOG(INFO) << "Sending action: " << DiscoAction2String(action) << " reg: " << reg_id << " tid: " << std::this_thread::get_id();
     constexpr int kNumArgs = 2 + sizeof...(Args);
     TVMValue values[kNumArgs];
     int type_codes[kNumArgs];
