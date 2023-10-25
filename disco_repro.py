@@ -17,6 +17,7 @@ def _numpy_to_worker_0(sess: di.Session, np_array: np.array):
 
 
 def f(sess):
+    sess.sync_worker_0()
     x_np = np.arange(8 * 16).astype("float32").reshape([8, 16])
     x_disc = _numpy_to_worker_0(sess, x_np)
 
