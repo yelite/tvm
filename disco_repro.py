@@ -63,6 +63,11 @@ def main(lib_path):
     mod = sess.load_vm_module(path, device=device)
     for _ in range(75):
         f(sess, mod)
+        for obj in gc.get_objects():
+            if isinstance(obj, di.DRef):
+                live_drefs.add(id(obj))
+                print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
+
 
 
 with tempfile.TemporaryDirectory() as tmpdir:
