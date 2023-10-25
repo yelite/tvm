@@ -1,9 +1,9 @@
+import gc
 import tempfile
-import time
 import threading
+import time
 
 import numpy as np
-import gc
 
 import tvm
 from tvm import relax as rx
@@ -13,14 +13,6 @@ from tvm.script import relax as R
 from tvm.script import tir as T
 
 device = tvm.cpu()
- 
-def collect_callback(phase, info):
-    if phase == "stop":
-        for obj in info.objects:
-            print(f"Collecting object {obj!r}")
-
-# Register the callback function
-gc.callbacks.append(collect_callback)
 
 
 @I.ir_module
@@ -87,6 +79,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
         time.sleep(0.005)
         if i % 100 == 0:
+            live_drefs = set()
+            for obj in gc.get_objects():
+                if isinstance(obj, di.DRef):
+                    live_drefs.add(id(obj))
+                    print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
             gc.collect()
+            for obj in gc.get_objects():
+                if isinstance(obj, di.DRef):
+                    live_drefs.remove(id(obj))
+            if live_drefs:
+                print("DRefs collected by GC.")
+                print(live_drefs)
 
     thread.join()
