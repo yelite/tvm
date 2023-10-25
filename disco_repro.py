@@ -14,9 +14,10 @@ from tvm.script import tir as T
 
 device = tvm.cpu()
  
-def collect_callback(args):
-    for obj in args.objects:
-        print(f"Collecting object {obj!r}")
+def collect_callback(phase, info):
+    if phase == "stop":
+        for obj in info.objects:
+            print(f"Collecting object {obj!r}")
 
 # Register the callback function
 gc.callbacks.append(collect_callback)
