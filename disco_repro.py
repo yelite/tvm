@@ -3,6 +3,7 @@ import time
 import threading
 
 import numpy as np
+import gc
 
 import tvm
 from tvm import relax as rx
@@ -74,6 +75,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
 
-    while thread.is_alive():
+    for i in range(3000):
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
+        time.sleep(0.005)
+        if i % 100 == 0:
+            gc.collect()
+
     thread.join()
