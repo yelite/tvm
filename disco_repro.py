@@ -52,7 +52,7 @@ def f(sess, mod):
     x_np = np.arange(8 * 16).astype("float32").reshape([8, 16])
     x_disc = _numpy_to_worker_0(sess, x_np)
     y_disc = mod["main"](x_disc)
-    time.sleep(0.1)
+    time.sleep(0.01)
     y_nd = _numpy_from_worker_0(sess, y_disc, shape=y_np.shape, dtype=y_np.dtype)
 
 
@@ -73,6 +73,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
     for _ in range(300):
-        d = np.arange(800 * 1600).astype("float32").reshape([800, 1600])
-        time.sleep(0.05)
+        d = np.arange(8 * 16).astype("float32").reshape([8, 16])
+        time.sleep(0.005)
     thread.join()
