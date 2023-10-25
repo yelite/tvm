@@ -37,6 +37,9 @@ TVM_REGISTER_GLOBAL("runtime.disco.SessionThreaded").set_body_typed(Session::Thr
 TVM_REGISTER_GLOBAL("runtime.disco.DRefSession").set_body_typed([](DRef obj) {
   return obj->session;
 });
+TVM_REGISTER_GLOBAL("runtime.disco.DRefRegId").set_body_typed([](DRef obj) {
+  return obj->reg_id;
+});
 TVM_REGISTER_GLOBAL("runtime.disco.DRefDebugGetFromRemote")
     .set_body_method<DRef>(&DRefObj::DebugGetFromRemote);
 TVM_REGISTER_GLOBAL("runtime.disco.DRefDebugCopyFrom")

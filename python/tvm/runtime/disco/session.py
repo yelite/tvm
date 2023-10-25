@@ -36,6 +36,14 @@ class DRef(Object):
     to each object, and the worker process uses this id to refer to the object residing on itself.
     """
 
+    def __del__(self):
+        print(f"Deleting {id(self)}, reg_id: {self.reg_id}")
+        super().__del__()
+
+    @property
+    def reg_id(self) -> int:
+        return _ffi_api.DRefRegId(self)  # type: ignore # pylint: disable=no-member
+
     @property
     def session(self) -> "Session":
         """Get the session that this DRef belongs to."""
