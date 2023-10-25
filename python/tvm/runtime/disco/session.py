@@ -85,7 +85,6 @@ class DRef(Object):
             value = _as_NDArray(value)
         return _ffi_api.DRefDebugCopyFrom(self, worker_id, value)  # type: ignore # pylint: disable=no-member
 
-c = []
 
 class DPackedFunc(DRef):
     """A PackedFunc in a Disco session."""
@@ -93,7 +92,6 @@ class DPackedFunc(DRef):
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
         dref.handle = None
-        c.append(dref)
 
     def __call__(self, *args) -> DRef:
         return self.session.call_packed(self, *args)
@@ -105,8 +103,6 @@ class DModule(DRef):
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
         del dref.handle
-        c.append(dref)
-
 
     def __getitem__(self, name: str) -> DPackedFunc:
         func = self.session._get_cached_method("runtime.ModuleGetFunction")
