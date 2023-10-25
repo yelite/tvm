@@ -51,6 +51,7 @@ def f(sess, mod):
     sess.sync_worker_0()
     x_np = np.arange(8 * 16).astype("float32").reshape([8, 16])
     x_disc = _numpy_to_worker_0(sess, x_np)
+    time.sleep(0.01)
     y_disc = mod["main"](x_disc)
     time.sleep(0.01)
     y_nd = _numpy_from_worker_0(sess, y_disc, shape=y_np.shape, dtype=y_np.dtype)
@@ -59,7 +60,7 @@ def f(sess, mod):
 def main(lib_path):
     sess = di.ProcessSession(num_workers=2)
     mod = sess.load_vm_module(path, device=device)
-    for _ in range(50):
+    for _ in range(750):
         f(sess, mod)
 
 
@@ -72,7 +73,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
-    for _ in range(300):
+    for _ in range(3000):
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
         time.sleep(0.005)
     thread.join()
