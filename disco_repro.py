@@ -61,8 +61,9 @@ def f(sess, mod):
 def main(lib_path):
     sess = di.ProcessSession(num_workers=2)
     mod = sess.load_vm_module(path, device=device)
-    for _ in range(750):
+    for _ in range(75):
         f(sess, mod)
+        print(gc.garbage)
 
 
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -75,10 +76,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
 
-    for i in range(3000):
+    for i in range(300):
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
         time.sleep(0.005)
-        if i % 100 == 0:
-            gc.collect()
+        # if i % 100 == 0:
+        #     gc.collect()
 
     thread.join()
