@@ -13,6 +13,13 @@ from tvm.script import relax as R
 from tvm.script import tir as T
 
 device = tvm.cpu()
+ 
+def collect_callback(args):
+    for obj in args.objects:
+        print(f"Collecting object {obj!r}")
+
+# Register the callback function
+gc.callbacks.append(collect_callback)
 
 
 @I.ir_module
@@ -63,7 +70,6 @@ def main(lib_path):
     mod = sess.load_vm_module(path, device=device)
     for _ in range(75):
         f(sess, mod)
-        print(gc.garbage)
 
 
 with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,7 +85,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     for i in range(300):
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
         time.sleep(0.005)
-        # if i % 100 == 0:
-        #     gc.collect()
+        if i % 100 == 0:
+            gc.collect()
 
     thread.join()
