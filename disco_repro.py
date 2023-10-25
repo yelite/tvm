@@ -62,11 +62,19 @@ def main(lib_path):
     sess = di.ProcessSession(num_workers=2)
     mod = sess.load_vm_module(path, device=device)
     for _ in range(75):
-        f(sess, mod)
+        print("Work Thread Before")
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
                 live_drefs.add(id(obj))
                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
+        print("==========")
+        f(sess, mod)
+        print("Work Thread After")
+        for obj in gc.get_objects():
+            if isinstance(obj, di.DRef):
+                live_drefs.add(id(obj))
+                print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
+        print("==========")
 
 
 
@@ -84,6 +92,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         d = np.arange(8 * 16).astype("float32").reshape([8, 16])
         time.sleep(0.005)
         if i % 100 == 0:
+            print("Main Thread GC")
             live_drefs = set()
             for obj in gc.get_objects():
                 if isinstance(obj, di.DRef):
@@ -96,5 +105,6 @@ with tempfile.TemporaryDirectory() as tmpdir:
             if live_drefs:
                 print("DRefs collected by GC.")
                 print(live_drefs)
+            print("==========")
 
     thread.join()
