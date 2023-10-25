@@ -72,6 +72,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
 
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
-    for _ in range(50):
-        time.sleep(0.1)
+    for _ in range(300):
+        d = np.arange(800 * 1600).astype("float32").reshape([800, 1600])
+        time.sleep(0.01)
     thread.join()
