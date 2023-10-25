@@ -49,6 +49,8 @@ DiscoWorker* DiscoWorker::ThreadLocal() {
 
 void DiscoWorker::SetRegister(int reg_id, TVMArgValue value) {
   ICHECK(0 <= reg_id && reg_id < static_cast<int>(register_file.size()));
+  LOG(INFO) << "Setting register " << reg_id << ", type: " << GetCustomTypeName(value.type_code())
+            << " tid: " << std::this_thread::get_id();
   TVMRetValue& rv = register_file.at(reg_id);
   if (rv.type_code() == kTVMNDArrayHandle && value.type_code() == kTVMNDArrayHandle) {
     NDArray dst = rv;
