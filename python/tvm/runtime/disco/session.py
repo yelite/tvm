@@ -37,7 +37,10 @@ class DRef(Object):
     """
 
     def __del__(self):
-        print(f"Deleting {id(self)}, reg_id: {self.reg_id}")
+        if self.handle is not None:
+            print(f"Deleting {id(self)}, reg_id: {self.reg_id}")
+        else:
+            print("Deleting none dref")
         super().__del__()
 
     @property
