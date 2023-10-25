@@ -34,7 +34,6 @@ class TestMod:
 
 
 def _numpy_to_worker_0(sess: di.Session, np_array: np.array):
-    # x_array = sess.empty(np_array.shape, "float32", device=dev)
     x_array = sess.empty(np_array.shape, "float32")
     host_array = tvm.nd.array(np_array, device=device)
     sess.copy_to_worker_0(host_array, x_array)
@@ -61,20 +60,19 @@ def f(sess, mod):
 def main(lib_path):
     sess = di.ProcessSession(num_workers=2)
     mod = sess.load_vm_module(path, device=device)
-    for _ in range(75):
+    for _ in range(3):
         print("==========")
         print("Work Thread Before")
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
-                live_drefs.add(id(obj))
                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
         print("==========")
         f(sess, mod)
+        sess._cache = {}
         print("==========")
         print("Work Thread After")
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
-                live_drefs.add(id(obj))
                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
         print("==========")
 
@@ -90,24 +88,24 @@ with tempfile.TemporaryDirectory() as tmpdir:
     thread = threading.Thread(target=main, args=(path,))
     thread.start()
 
-    for i in range(300):
-        d = np.arange(8 * 16).astype("float32").reshape([8, 16])
-        time.sleep(0.005)
-        if i % 100 == 0:
-            print("==========")
-            print("Main Thread GC")
-            live_drefs = set()
-            for obj in gc.get_objects():
-                if isinstance(obj, di.DRef):
-                    live_drefs.add(id(obj))
-                    print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
-            gc.collect()
-            for obj in gc.get_objects():
-                if isinstance(obj, di.DRef):
-                    live_drefs.remove(id(obj))
-            if live_drefs:
-                print("DRefs collected by GC.")
-                print(live_drefs)
-            print("==========")
+    # for i in range(3):
+    #     d = np.arange(8 * 16).astype("float32").reshape([8, 16])
+    #     time.sleep(0.005)
+    #     if i % 100 == 0:
+    #         print("==========")
+    #         print("Main Thread GC")
+    #         live_drefs = set()
+    #         for obj in gc.get_objects():
+    #             if isinstance(obj, di.DRef):
+    #                 live_drefs.add(id(obj))
+    #                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
+    #         gc.collect()
+    #         for obj in gc.get_objects():
+    #             if isinstance(obj, di.DRef):
+    #                 live_drefs.remove(id(obj))
+    #         if live_drefs:
+    #             print("DRefs collected by GC.")
+    #             print(live_drefs)
+    #         print("==========")
 
     thread.join()
