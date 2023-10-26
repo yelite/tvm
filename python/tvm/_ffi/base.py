@@ -340,7 +340,7 @@ def get_last_ffi_error():
     return ERROR_TYPE.get(err_type, TVMError)(py_err_msg)
 
 
-def _append_traceback_frame(tb, func_name, filepath, lineno):
+def _append_traceback_frame(tbs, func_name, filepath, lineno):
     """Append a dummy frame to appear in the Python traceback"""
 
     # Compile a dummy function to Python bytecode, so that with the
@@ -364,13 +364,16 @@ def _append_traceback_frame(tb, func_name, filepath, lineno):
     # Execute the dummy function in order to generate a stack frame.
     dummy_tb = None
     try:
-        dummy_func()
+        eval("dummy_func()")
     except NotImplementedError as err:
         dummy_tb = err.__traceback__
 
     # Insert the dummy function into the stack trace.
     new_frame = dummy_tb.tb_next
-    return types.TracebackType(tb, new_frame.tb_frame, new_frame.tb_lasti, new_frame.tb_lineno)
+    tbs.append(types.TracebackType(tbs[-1], new_frame.tb_frame, new_frame.tb_lasti, new_frame.tb_lineno))
+    del new_frame
+    del dummy_tb
+    del tbs
 
 
 def _filter_traceback_frames(tb, filter_funcs: Sequence[Callable[[types.CodeType], bool]]):
@@ -432,7 +435,7 @@ def raise_last_ffi_error():
         # pointer to PyObject* using ctypes.
         py_err = ctypes.cast(ctypes.c_void_p(py_err), ctypes.py_object).value
 
-    tb = py_err.__traceback__
+    tbs = [py_err.__traceback__]
 
     # The py_err.__traceback__ only goes from the location thrown
     # up to the next FFI handoff.  To have the stacktrace also
@@ -451,7 +454,7 @@ def raise_last_ffi_error():
                 filename = filename.strip()
                 lineno = int(lineno.strip())
 
-                tb = _append_traceback_frame(tb, func_name, filename, lineno)
+                _append_traceback_frame(tbs, func_name, filename, lineno)
 
     # Remove stack frames that provide little benefit to
     # debugging.  These are only removed from the stack frames
@@ -463,9 +466,11 @@ def raise_last_ffi_error():
         lambda code: "tvm/_ffi/_ctypes/packed_func.py" in code.co_filename,
         lambda code: "tvm/_ffi/base.py" in code.co_filename,
     ]
-    tb = _filter_traceback_frames(tb, filter_funcs)
+    tb = _filter_traceback_frames(tbs[-1], filter_funcs)
+    del tbs
 
     py_err = py_err.with_traceback(tb)
+    del tb
 
     # The exception PyObject may contain a large amount of state,
     # including all stack frames that may be inspected in a later

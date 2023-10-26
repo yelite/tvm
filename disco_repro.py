@@ -1,7 +1,9 @@
 import gc
+import sys
 import tempfile
 import threading
 import time
+import ctypes
 
 import numpy as np
 
@@ -14,7 +16,7 @@ from tvm.script import tir as T
 
 device = tvm.cpu()
 
-frame = None
+thatlist = None
 
 
 @I.ir_module
@@ -44,19 +46,26 @@ def _numpy_to_worker_0(sess: di.Session, np_array: np.array):
 
 def _numpy_from_worker_0(sess: di.Session, remote_array, shape, dtype):
     host_array = tvm.nd.empty(shape, dtype, device=device)
+    print(f"Before copy call {id(remote_array)} ref count: {get_ref_count(id(remote_array))}")
     sess.copy_from_worker_0(host_array, remote_array)
+    print(f"After copy call {id(remote_array)} ref count: {get_ref_count(id(remote_array))}")
     sess.sync_worker_0()
     return host_array.numpy()
 
+
+def get_ref_count(i):
+    return ctypes.c_long.from_address(i).value
 
 def f(sess, mod):
     sess.sync_worker_0()
     x_np = np.arange(8 * 16).astype("float32").reshape([8, 16])
     x_disc = _numpy_to_worker_0(sess, x_np)
-    time.sleep(0.01)
+    # time.sleep(0.01)
     y_disc = mod["main"](x_disc)
-    time.sleep(0.01)
+    # time.sleep(0.01)
+    print(f"Before from call {id(y_disc)} ref count: {get_ref_count(id(y_disc))}")
     y_nd = _numpy_from_worker_0(sess, y_disc, shape=y_np.shape, dtype=y_np.dtype)
+    print(f"After from call {id(y_disc)} ref count: {get_ref_count(id(y_disc))}")
 
 
 def main(lib_path):
@@ -72,14 +81,41 @@ def main(lib_path):
                 live_drefs.add(id(obj))
                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
         print("==========")
+        print(f"Before Session cache: {sess._cache}")
         f(sess, mod)
+        print(f"After Session cache: {sess._cache}")
         # gc.collect()
         print("==========")
         print("Work Thread After")
+        new_drefs = []
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
                 if id(obj) not in live_drefs:
                     print(f"New DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
+                    new_drefs.append(obj)
+            del obj
+
+        for dref in new_drefs:
+            referents = gc.get_referents(dref)
+            referrers = gc.get_referrers(dref)
+            print(
+                f"New DRef {type(dref)} for {id(dref)} refcount: {sys.getrefcount(dref)} referents: {len(referents)} referrers: {len(referrers)}"
+            )
+            print(referrers)
+            if isinstance(referrers[0], dict):
+                gr = gc.get_referrers
+                t = referrers[0]
+                import code; code.interact(local=locals())
+            del dref
+            del referrers
+            del referents
+
+        ids = [id(r) for r in new_drefs]
+        new_drefs.clear()
+        del new_drefs
+        for i in ids:
+            print(f"Id {i} refcnt: {get_ref_count(i)}")
+
 
         print("==========")
 

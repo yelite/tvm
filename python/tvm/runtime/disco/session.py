@@ -36,12 +36,13 @@ class DRef(Object):
     to each object, and the worker process uses this id to refer to the object residing on itself.
     """
 
-    def __setstate__(self, state):
-        super().__setstate__(state)
-        print(f"Creating DRef {id(self)} through setting state. reg: {self.reg_id}")
+    def __new__(cls, *args, **kwargs):
+        obj = super().__new__(cls)
+        print(f"Creating DRef {id(obj)} through new")
+        return obj
 
     def __del__(self):
-        if self.handle is not None:
+        if hasattr(self, "handle"):
             print(f"Deleting {id(self)}, reg_id: {self.reg_id}")
         else:
             print(f"Deleting null dref {id(self)}")
@@ -95,8 +96,8 @@ class DPackedFunc(DRef):
 
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
-        dref.handle = None
         print(f"Creating DPackedFunc {id(self)} from DRef {id(dref)}. reg: {self.reg_id}")
+        del dref.handle
 
     def __call__(self, *args) -> DRef:
         return self.session.call_packed(self, *args)
@@ -107,11 +108,12 @@ class DModule(DRef):
 
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
-        del dref.handle
         print(f"Creating DModule {id(self)} from DRef {id(dref)}. reg: {self.reg_id}")
+        del dref.handle
 
     def __getitem__(self, name: str) -> DPackedFunc:
         func = self.session._get_cached_method("runtime.ModuleGetFunction")
+        print(f"runtime.ModuleGetFunction DRef {id(func)} reg: {func.reg_id}")
         return DPackedFunc(func(self, name, False))
 
 
@@ -121,14 +123,17 @@ class Session(Object):
     various PackedFunc calling convention."""
 
     def _get_cached_method(self, name: str) -> Callable:
-        if not hasattr(self, "_cache"):
+        if "_cache" not in self.__dict__:
             cache = self._cache = {}  # pylint: disable=attribute-defined-outside-init
         else:
             cache = self._cache
         if name not in cache:
+            print(cache)
+            print(f"!!!!!!!!!Creating {name}: has cache {hasattr(self, '_cache')}")
             func = cache[name] = self.get_global_func(name)
         else:
             func = cache[name]
+        print(id(func))
         return func
 
     def empty(
