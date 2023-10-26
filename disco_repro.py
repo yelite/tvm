@@ -14,6 +14,8 @@ from tvm.script import tir as T
 
 device = tvm.cpu()
 
+frame = None
+
 
 @I.ir_module
 class TestMod:
@@ -60,22 +62,26 @@ def f(sess, mod):
 def main(lib_path):
     sess = di.ProcessSession(num_workers=2)
     mod = sess.load_vm_module(path, device=device)
+    f(sess, mod)
     for _ in range(3):
+        live_drefs = set()
         print("==========")
         print("Work Thread Before")
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
+                live_drefs.add(id(obj))
                 print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
         print("==========")
         f(sess, mod)
-        sess._cache = {}
+        # gc.collect()
         print("==========")
         print("Work Thread After")
         for obj in gc.get_objects():
             if isinstance(obj, di.DRef):
-                print(f"Live DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
-        print("==========")
+                if id(obj) not in live_drefs:
+                    print(f"New DRef: {id(obj)}, reg: {obj.reg_id}, type: {type(obj)}")
 
+        print("==========")
 
 
 with tempfile.TemporaryDirectory() as tmpdir:

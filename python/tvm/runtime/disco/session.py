@@ -36,9 +36,9 @@ class DRef(Object):
     to each object, and the worker process uses this id to refer to the object residing on itself.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, *kwargs)
-        print(f"Creating DRef {id(self)}")
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        print(f"Creating DRef {id(self)} through setting state. reg: {self.reg_id}")
 
     def __del__(self):
         if self.handle is not None:
@@ -96,7 +96,7 @@ class DPackedFunc(DRef):
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
         dref.handle = None
-        print(f"Creating DPackedFunc {id(dref)}")
+        print(f"Creating DPackedFunc {id(self)} from DRef {id(dref)}. reg: {self.reg_id}")
 
     def __call__(self, *args) -> DRef:
         return self.session.call_packed(self, *args)
@@ -108,7 +108,7 @@ class DModule(DRef):
     def __init__(self, dref: DRef) -> None:
         self.handle = dref.handle
         del dref.handle
-        print(f"Creating DModule {id(dref)}")
+        print(f"Creating DModule {id(self)} from DRef {id(dref)}. reg: {self.reg_id}")
 
     def __getitem__(self, name: str) -> DPackedFunc:
         func = self.session._get_cached_method("runtime.ModuleGetFunction")
