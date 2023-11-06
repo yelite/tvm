@@ -177,12 +177,39 @@ Allocator* MemoryManager::GetAllocator(Device dev, AllocatorType type) {
 
 void MemoryManager::Clear() {
   MemoryManager* m = MemoryManager::Global();
-  std::lock_guard<std::mutex> lock(m->mu_);
-  for (const auto& [device, allocators] : m->allocators_) {
-    for (const auto& [allocator_type, allocator] : allocators) {
-      allocator->Clear();
+  m->ForEachAllocator(
+      [](Allocator* allocator, AllocatorType alloc_type, Device dev) { allocator->Clear(); });
+}
+
+void MemoryManager::StartProfiling() {
+  MemoryManager* m = MemoryManager::Global();
+  m->ForEachAllocator([](Allocator* allocator, AllocatorType alloc_type, Device dev) {
+    if (auto* pooled_alloc = static_cast<PooledAllocator*>(allocator)) {
+      pooled_alloc->StartProfiling();
     }
+  });
+}
+
+void MemoryManager::StopProfiling() {
+  MemoryManager* m = MemoryManager::Global();
+  m->ForEachAllocator([](Allocator* allocator, AllocatorType alloc_type, Device dev) {
+    if (auto* pooled_alloc = static_cast<PooledAllocator*>(allocator)) {
+      pooled_alloc->StopProfiling();
+    }
+  });
+}
+
+size_t MemoryManager::UsedMemory(Device dev) {
+  MemoryManager* m = MemoryManager::Global();
+  std::lock_guard<std::mutex> lock(m->mu_);
+  auto alloc_type = AllocatorType::kPooled;
+  if (m->allocators_.count(dev)) {
+    return m->allocators_.at(dev).at(alloc_type)->UsedMemory();
   }
+  // For Disco, all devices will be queried with the same `dev`. When the device ID of the
+  // queried device is different from the one used by this VM instance, we cannot return
+  // a meaningful value.
+  return 0;
 }
 
 NDArray Allocator::Empty(ShapeTuple shape, DLDataType dtype, DLDevice dev,
@@ -224,6 +251,18 @@ void Allocator::Clear() {
 }
 
 TVM_REGISTER_GLOBAL("vm.builtin.memory_manager.clear").set_body_typed(MemoryManager::Clear);
+
+TVM_REGISTER_GLOBAL("vm.memory_manager.get_used_memory").set_body_typed([](Device dev) {
+  return static_cast<int64_t>(MemoryManager::UsedMemory(dev));
+});
+
+TVM_REGISTER_GLOBAL("vm.memory_manager.start_profiling").set_body_typed([]() {
+  MemoryManager::StartProfiling();
+});
+
+TVM_REGISTER_GLOBAL("vm.memory_manager.stop_profiling").set_body_typed([]() {
+  MemoryManager::StopProfiling();
+});
 
 }  // namespace memory
 }  // namespace runtime

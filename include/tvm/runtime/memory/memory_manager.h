@@ -124,8 +124,22 @@ class MemoryManager {
   /*! \brief Clear the allocators. */
   static void Clear();
 
+  static size_t UsedMemory(Device dev);
+
+  static void StartProfiling();
+  static void StopProfiling();
+
  private:
   MemoryManager() {}
+
+  void ForEachAllocator(std::function<void(Allocator*, AllocatorType, Device)> func) {
+    std::lock_guard<std::mutex> lock(mu_);
+    for (const auto& [device, allocators] : allocators_) {
+      for (const auto& [allocator_type, allocator] : allocators) {
+        func(allocator.get(), allocator_type, device);
+      }
+    }
+  }
 
  protected:
   std::mutex mu_;
