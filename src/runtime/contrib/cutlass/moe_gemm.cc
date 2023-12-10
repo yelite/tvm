@@ -1,0 +1,78 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+#include <cuda.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime.h>
+#include <tvm/runtime/ndarray.h>
+#include <tvm/runtime/packed_func.h>
+#include <tvm/runtime/registry.h>
+
+#include <optional>
+#include <string>
+
+#include "../../../3rdparty/cutlass_fpA_intB_gemm/cutlass/include/cutlass/half.h"
+// clang-format off
+// theses headers can't be reordered
+#include "../../../3rdparty/cutlass_fpA_intB_gemm/cutlass/include/cutlass/numeric_types.h"
+#include "../../../3rdparty/cutlass_fpA_intB_gemm/cutlass/include/cutlass/integer_subbyte.h"
+// clang-format on
+
+namespace fastertransformer {
+
+template <typename T, typename WeightType>
+void moe_gemm_bias_act(const T* A, const WeightType* B, const T* weight_scales, const T* biases,
+                       T* C, int64_t* total_rows_before_expert, int64_t total_rows, int64_t gemm_n,
+                       int64_t gemm_k, int num_experts, std::optional<std::string> activation,
+                       cudaStream_t stream);
+}
+
+namespace tvm {
+namespace runtime {
+
+TVM_REGISTER_GLOBAL("cutlass.moe_gemm_f16f16")
+    .set_body_typed([](NDArray x, NDArray weight, NDArray total_rows_before_expert,
+                       int64_t total_rows, int64_t n, int64_t k, int64_t num_experts, NDArray out) {
+      auto func = tvm::runtime::Registry::Get("runtime.get_cuda_stream");
+      ICHECK(func != nullptr);
+      cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
+
+      fastertransformer::moe_gemm_bias_act<half, half>(
+          reinterpret_cast<half*>(x->data), reinterpret_cast<half*>(weight->data), nullptr, nullptr,
+          reinterpret_cast<half*>(out->data),
+          reinterpret_cast<int64_t*>(total_rows_before_expert->data), total_rows, n, k, num_experts,
+          std::nullopt, stream);
+    });
+
+TVM_REGISTER_GLOBAL("cutlass.moe_gemm_s4f16")
+    .set_body_typed([](NDArray x, NDArray weight, NDArray scales, NDArray total_rows_before_expert,
+                       int64_t total_rows, int64_t n, int64_t k, int64_t num_experts, NDArray out) {
+      auto func = tvm::runtime::Registry::Get("runtime.get_cuda_stream");
+      ICHECK(func != nullptr);
+      cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
+
+      fastertransformer::moe_gemm_bias_act<half, cutlass::uint4b_t>(
+          reinterpret_cast<half*>(x->data), reinterpret_cast<cutlass::uint4b_t*>(weight->data),
+          reinterpret_cast<half*>(scales->data), nullptr, reinterpret_cast<half*>(out->data),
+          reinterpret_cast<int64_t*>(total_rows_before_expert->data), total_rows, n, k, num_experts,
+          std::nullopt, stream);
+    });
+
+}  // namespace runtime
+}  // namespace tvm
