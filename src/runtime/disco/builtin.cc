@@ -67,7 +67,11 @@ Module LoadVMModule(std::string path, Device device) {
 }
 
 NDArray DiscoEmptyNDArray(ShapeTuple shape, DataType dtype, Device device) {
-  return NDArray::Empty(shape, dtype, UseDefaultDeviceIfNone(device));
+  auto allocator =
+      MemoryManager::GetOrCreateAllocator(UseDefaultDeviceIfNone(device), AllocatorType::kPooled);
+  auto buffer = allocator->Alloc(shape, dtype);
+  auto storage = Storage(buffer);
+  return storage->AllocNDArray(/*offset=*/0, shape, dtype);
 }
 
 const PackedFunc& GetCCLFunc(const char* name) {
