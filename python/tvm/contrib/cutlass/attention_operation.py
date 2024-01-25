@@ -192,9 +192,9 @@ def instantiate_flash_attention_template(attrs):
     cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
 
     flash_attn::flash_attention_forward(
-                            static_cast<const cutlass::half_t*>(${query}->data),
-    			    static_cast<const cutlass::half_t*>(${key}->data),
-    			    static_cast<const cutlass::half_t*>(${value}->data),
+                            static_cast<cutlass::half_t*>(${query}->data),
+                            static_cast<cutlass::half_t*>(${key}->data),
+                            static_cast<cutlass::half_t*>(${value}->data),
     			    static_cast<cutlass::half_t*>(out0->data),
     			    ${num_batches},
     			    ${num_queries},
@@ -244,9 +244,9 @@ def instantiate_flash_attention_template(attrs):
     cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
 
     flash_attn::flash_attention_forward(
-                            static_cast<const cutlass::half_t*>(${qkv}->data),
-    			    static_cast<const cutlass::half_t*>(${qkv}->data) + ${head_dim} * ${num_q_heads},
-    			    static_cast<const cutlass::half_t*>(${qkv}->data) + ${head_dim} * (${num_q_heads} + ${num_kv_heads}),
+                            static_cast<cutlass::half_t*>(${qkv}->data),
+                            static_cast<cutlass::half_t*>(${qkv}->data) + ${head_dim} * ${num_q_heads},
+                            static_cast<cutlass::half_t*>(${qkv}->data) + ${head_dim} * (${num_q_heads} + ${num_kv_heads}),
     			    static_cast<cutlass::half_t*>(out0->data),
     			    ${num_batches},
     			    ${num_queries},
@@ -302,9 +302,9 @@ def instantiate_flash_attention_var_len_template(attrs):
     cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
 
     flash_attn::flash_attention_var_len_forward(
-                            static_cast<const cutlass::half_t*>(${query}->data),
-    			    static_cast<const cutlass::half_t*>(${key}->data),
-    			    static_cast<const cutlass::half_t*>(${value}->data),
+                            static_cast<cutlass::half_t*>(${query}->data),
+                            static_cast<cutlass::half_t*>(${key}->data),
+                            static_cast<cutlass::half_t*>(${value}->data),
                             static_cast<const int*>(${seqstart_q}->data),
                             static_cast<const int*>(${seqstart_k}->data),
     			    static_cast<cutlass::half_t*>(out0->data),
