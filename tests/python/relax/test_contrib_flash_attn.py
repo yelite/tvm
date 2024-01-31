@@ -176,6 +176,4 @@ def test_reconstruct_from_cache():
 
 
 if __name__ == "__main__":
-    # tvm.testing.main()
-    # test_flash_decoding_with_paged_kvcache()
-    test_reconstruct_from_cache()
+    tvm.testing.main()

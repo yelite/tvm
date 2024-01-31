@@ -210,10 +210,7 @@ class JSONSerializer : public relax::MemoizedExprTranslator<NodeEntries> {
         dtype.emplace_back(DType2String(tensor_sinfo->dtype));
       }
       node->SetNumOutput(tuple_sinfo->fields.size());
-    } else {
-      const auto* tensor_sinfo = struct_info.as<TensorStructInfoNode>();
-      ICHECK(tensor_sinfo) << "Expect TensorStructInfo, but received: "
-                           << struct_info->GetTypeKey();
+    } else if (const auto* tensor_sinfo = struct_info.as<TensorStructInfoNode>()) {
       ICHECK(tensor_sinfo->shape.defined()) << "Expect shape to be defined.";
       ShapeExpr output_shape = Downcast<ShapeExpr>(tensor_sinfo->shape.value());
 
