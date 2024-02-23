@@ -25,22 +25,22 @@ namespace runtime {
 namespace vllm {
 
 Array<NDArray> AllocateKVCache(int head_size, int num_layers, int num_heads, int block_size,
-                               int num_blocks) {
+                               int num_blocks, tvm::runtime::DataType kv_cache_dtype) {
+  CHECK(kv_cache_dtype.is_float16() || kv_cache_dtype.is_float8())
+      << "Unsupported data type for kv_cache: " << kv_cache_dtype;
   Array<NDArray> cache;
-  int element_size = 2;
+  int element_size = kv_cache_dtype.bits() / 8;
   int vec_size = 16 / element_size;
-
   int device_id;
   cudaGetDevice(&device_id);
 
   DLDevice dev{DLDeviceType::kDLCUDA, device_id};
 
   for (int i = 0; i < num_layers; ++i) {
-    NDArray key_blocks =
-        NDArray::Empty({num_blocks, num_heads, head_size / vec_size, block_size, vec_size},
-                       runtime::DataType::Float(16), dev);
-    NDArray value_blocks = NDArray::Empty({num_blocks, num_heads, head_size, block_size},
-                                          runtime::DataType::Float(16), dev);
+    NDArray key_blocks = NDArray::Empty(
+        {num_blocks, num_heads, head_size / vec_size, block_size, vec_size}, kv_cache_dtype, dev);
+    NDArray value_blocks =
+        NDArray::Empty({num_blocks, num_heads, head_size, block_size}, kv_cache_dtype, dev);
     cache.push_back(key_blocks);
     cache.push_back(value_blocks);
   }

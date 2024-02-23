@@ -25,14 +25,17 @@
 #include <map>
 #include <vector>
 
+#include "quant_utils.cuh"
+
 namespace vllm {
 
-template <typename scalar_t>
+template <typename scalar_t, typename cache_t = scalar_t,
+          KVCacheDType kv_cache_dtype = KVCacheDType::kFloat>
 __global__ void reshape_and_cache_kernel(
     const scalar_t* __restrict__ key,      // [num_tokens, num_heads, head_size]
     const scalar_t* __restrict__ value,    // [num_tokens, num_heads, head_size]
-    scalar_t* __restrict__ key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
-    scalar_t* __restrict__ value_cache,    // [num_blocks, num_heads, head_size, block_size]
+    cache_t* __restrict__ key_cache,       // [num_blocks, num_heads, head_size/x, block_size, x]
+    cache_t* __restrict__ value_cache,     // [num_blocks, num_heads, head_size, block_size]
     const int* __restrict__ slot_mapping,  // [num_tokens]
     const int key_stride, const int value_stride, const int num_heads, const int head_size,
     const int block_size, const int x) {
@@ -57,18 +60,35 @@ __global__ void reshape_and_cache_kernel(
     const int tgt_value_idx = block_idx * num_heads * head_size * block_size +
                               head_idx * head_size * block_size + head_offset * block_size +
                               block_offset;
-    key_cache[tgt_key_idx] = __ldg(&key[src_key_idx]);
-    value_cache[tgt_value_idx] = __ldg(&value[src_value_idx]);
+    if constexpr (kv_cache_dtype == KVCacheDType::kE5M2Float) {
+#if USE_CUDA_FP8
+      key_cache[tgt_key_idx] =
+          fp8_e5m2_unscaled::vec_conversion<uint8_t, scalar_t>(__ldg(&key[src_key_idx]));
+      value_cache[tgt_value_idx] =
+          fp8_e5m2_unscaled::vec_conversion<uint8_t, scalar_t>(__ldg(&value[src_value_idx]));
+#endif
+    } else if constexpr (kv_cache_dtype == KVCacheDType::kE4M3Float) {
+#if USE_CUDA_FP8
+      key_cache[tgt_key_idx] =
+          fp8_e4m3_unscaled::vec_conversion<uint8_t, scalar_t>(__ldg(&key[src_key_idx]));
+      value_cache[tgt_value_idx] =
+          fp8_e4m3_unscaled::vec_conversion<uint8_t, scalar_t>(__ldg(&value[src_value_idx]));
+#endif
+    } else {
+      key_cache[tgt_key_idx] = __ldg(&key[src_key_idx]);
+      value_cache[tgt_value_idx] = __ldg(&value[src_value_idx]);
+    }
   }
 }
 
-template <typename scalar_t>
+template <typename scalar_t, typename cache_t, KVCacheDType kv_cache_dtype>
 __global__ void reconstruct_from_cache_kernel(
-    const scalar_t* __restrict__ key_cache,  // [num_blocks, num_heads, head_size/x, block_size, x]
-    const scalar_t* __restrict__ value_cache,  // [num_blocks, num_heads, head_size, block_size]
-    const int* __restrict__ slot_mapping,      // [num_tokens]
-    scalar_t* __restrict__ key,                // [num_tokens, num_heads, head_size]
-    scalar_t* __restrict__ value,              // [num_tokens, num_heads, head_size]
+    const cache_t* __restrict__ key_cache,    // [num_blocks, num_heads, head_size/x, block_size,
+                                              // x]
+    const cache_t* __restrict__ value_cache,  // [num_blocks, num_heads, head_size, block_size]
+    const int* __restrict__ slot_mapping,     // [num_tokens]
+    scalar_t* __restrict__ key,               // [num_tokens, num_heads, head_size]
+    scalar_t* __restrict__ value,             // [num_tokens, num_heads, head_size]
     const int key_stride, const int value_stride, const int num_heads, const int head_size,
     const int block_size, const int x) {
   const int token_idx = blockIdx.x;
@@ -93,8 +113,24 @@ __global__ void reconstruct_from_cache_kernel(
                               head_idx * head_size * block_size + head_offset * block_size +
                               block_offset;
 
-    key[tgt_key_idx] = __ldg(&key_cache[src_key_idx]);
-    value[tgt_value_idx] = __ldg(&value_cache[src_value_idx]);
+    if constexpr (kv_cache_dtype == KVCacheDType::kE5M2Float) {
+#if USE_CUDA_FP8
+      key[tgt_key_idx] =
+          fp8_e5m2_unscaled::vec_conversion<scalar_t, uint8_t>(__ldg(&key_cache[src_key_idx]));
+      value[tgt_value_idx] =
+          fp8_e5m2_unscaled::vec_conversion<scalar_t, uint8_t>(__ldg(&value_cache[src_value_idx]));
+#endif
+    } else if constexpr (kv_cache_dtype == KVCacheDType::kE4M3Float) {
+#if USE_CUDA_FP8
+      key[tgt_key_idx] =
+          fp8_e4m3_unscaled::vec_conversion<scalar_t, uint8_t>(__ldg(&key_cache[src_key_idx]));
+      value[tgt_value_idx] =
+          fp8_e4m3_unscaled::vec_conversion<scalar_t, uint8_t>(__ldg(&value_cache[src_value_idx]));
+#endif
+    } else {
+      key[tgt_key_idx] = __ldg(&key_cache[src_key_idx]);
+      value[tgt_value_idx] = __ldg(&value_cache[src_value_idx]);
+    }
   }
 }
 
@@ -144,14 +180,16 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reshape_and_cache")
 
       dim3 grid(num_tokens);
       dim3 block(std::min(num_heads * head_size, 512));
-
       using scalar_t = uint16_t;
-      vllm::reshape_and_cache_kernel<scalar_t><<<grid, block>>>(
-          static_cast<const scalar_t*>(key->data), static_cast<const scalar_t*>(value->data),
-          static_cast<scalar_t*>(key_cache->data), static_cast<scalar_t*>(value_cache->data),
-          static_cast<const int*>(slot_mapping->data), key_stride, value_stride, num_heads,
-          head_size, block_size, vec_size);
-
+      using cache_t = uint16_t;
+      using scalar_t = uint16_t;
+      VLLM_DISPATCH_KV_CACHE_DTYPE(key_cache->dtype, {
+        vllm::reshape_and_cache_kernel<scalar_t, cache_t, kv_cache_dtype><<<grid, block>>>(
+            static_cast<const scalar_t*>(key->data), static_cast<const scalar_t*>(value->data),
+            static_cast<cache_t*>(key_cache->data), static_cast<cache_t*>(value_cache->data),
+            static_cast<const int*>(slot_mapping->data), key_stride, value_stride, num_heads,
+            head_size, block_size, vec_size);
+      });
       return Array{key_cache, value_cache};
     });
 
@@ -174,13 +212,14 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.reconstruct_from_cache")
       dim3 block(std::min(num_heads * head_size, 512));
 
       using scalar_t = uint16_t;
-      vllm::reconstruct_from_cache_kernel<scalar_t>
-          <<<grid, block>>>(static_cast<const scalar_t*>(key_cache->data),
-                            static_cast<const scalar_t*>(value_cache->data),
-                            static_cast<const int*>(slot_mapping->data),
-                            static_cast<scalar_t*>(key->data), static_cast<scalar_t*>(value->data),
-                            key_stride, value_stride, num_heads, head_size, block_size, vec_size);
-
+      VLLM_DISPATCH_KV_CACHE_DTYPE(key_cache->dtype, {
+        vllm::reconstruct_from_cache_kernel<scalar_t, cache_t, kv_cache_dtype><<<grid, block>>>(
+            static_cast<const cache_t*>(key_cache->data),
+            static_cast<const cache_t*>(value_cache->data),
+            static_cast<const int*>(slot_mapping->data), static_cast<scalar_t*>(key->data),
+            static_cast<scalar_t*>(value->data), key_stride, value_stride, num_heads, head_size,
+            block_size, vec_size);
+      });
       return Array{key, value};
     });
 
@@ -223,11 +262,12 @@ TVM_REGISTER_GLOBAL("tvm.contrib.vllm.copy_blocks")
       dim3 grid(num_layers, num_pairs);
       dim3 block(std::min(1024, numel_per_block));
 
-      using scalar_t = uint16_t;
-      vllm::copy_blocks_kernel<scalar_t>
-          <<<grid, block>>>(static_cast<int64_t*>(key_cache_ptrs_gpu->data),
-                            static_cast<int64_t*>(value_cache_ptrs_gpu->data),
-                            static_cast<int64_t*>(block_mapping_gpu->data), numel_per_block);
+      VLLM_DISPATCH_KV_CACHE_DTYPE(key_cache->dtype, {
+        vllm::copy_blocks_kernel<cache_t>
+            <<<grid, block>>>(static_cast<int64_t*>(key_cache_ptrs_gpu->data),
+                              static_cast<int64_t*>(value_cache_ptrs_gpu->data),
+                              static_cast<int64_t*>(block_mapping_gpu->data), numel_per_block);
+      });
     });
 
 }  // namespace runtime

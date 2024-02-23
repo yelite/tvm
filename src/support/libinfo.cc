@@ -263,6 +263,10 @@
 #define TVM_INFO_USE_CCACHE "NOT-FOUND"
 #endif
 
+#ifndef TVM_INFO_USE_CUDA_FP8
+#define TVM_INFO_USE_CUDA_FP8 "NOT-FOUND"
+#endif
+
 namespace tvm {
 
 /*!
@@ -302,6 +306,7 @@ TVM_DLL Map<String, String> GetLibInfo() {
       {"USE_CPP_RTVM", TVM_INFO_USE_CPP_RTVM},
       {"USE_CUBLAS", TVM_INFO_USE_CUBLAS},
       {"USE_CUDA", TVM_INFO_USE_CUDA},
+      {"USE_CUDA_FP8", TVM_INFO_USE_CUDA_FP8},
       {"USE_NVTX", TVM_INFO_USE_NVTX},
       {"USE_NCCL", TVM_INFO_USE_NCCL},
       {"USE_CUDNN", TVM_INFO_USE_CUDNN},
