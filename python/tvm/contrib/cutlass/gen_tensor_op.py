@@ -764,12 +764,18 @@ def instantiate_template(func_name, annotations, func_args):
 
         is_mqa = annotations["num_q_heads"] != annotations["num_kv_heads"]
 
-        use_flash = (
+        is_flash_supported = (
             annotations["ret_dtype"] == "float16"
             and "bias" not in attrs
             and int(attrs["head_dim"]) <= 256
             and int(attrs["head_dim"]) % 8 == 0
             and int(attrs["head_dim"]) == int(attrs["head_dim_value"])
+            # Flash v2 is currently not supported for sm < 80
+            and int(annotations["arch"]) >= 80
+        )
+
+        use_flash = (
+            is_flash_supported
             # For the causal case (custom mask = "BottomRight"), only use flash for multi-query
             # attention workloads. Otherwise, CUTLASS fMHA seems faster for causal attention
             # with a single query.
@@ -779,9 +785,17 @@ def instantiate_template(func_name, annotations, func_args):
                 or (int(annotations["custom_mask_type"]) == 2 and is_mqa)
                 or (int(annotations["custom_mask_type"]) == 2 and "window_size" in annotations)
             )
-            # Flash v2 is currently not supported for sm < 80
-            and int(annotations["arch"]) >= 80
         )
+
+        if (
+            is_flash_supported
+            and not use_flash
+            and int(annotations["custom_mask_type"]) == 2
+            and int(attrs["head_dim"]) == 256
+        ):
+            # This is a workaround for prefill inference in Gemma. CUTLASS FMHA raises an error
+            # at runtime when the batch size is big. Flash Attention has no issue.
+            use_flash = True
 
         # See https://github.com/Dao-AILab/flash-attention/blob/
         # 92dd5703ecdb99aa4a4aee9817f28557907403a2/csrc/flash_attn/flash_api.cpp#L111-L116
