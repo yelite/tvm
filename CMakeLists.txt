@@ -365,6 +365,7 @@ tvm_file_glob(GLOB RUNTIME_SRCS
   src/runtime/vm/*.cc
   src/runtime/memory/*.cc
   src/runtime/disco/*.cc
+  src/runtime/disco/mlc_metadata/model.cc
   src/runtime/minrpc/*.cc
   src/runtime/relax_vm/*.cc
 )
@@ -595,9 +596,9 @@ add_library(tvm_libinfo_objs OBJECT ${LIBINFO_FILE})
 
 include(GNUInstallDirs)
 if(NOT BUILD_DUMMY_LIBTVM)
-  add_library(tvm SHARED 
-    $<TARGET_OBJECTS:tvm_objs> 
-    $<TARGET_OBJECTS:tvm_runtime_objs> 
+  add_library(tvm SHARED
+    $<TARGET_OBJECTS:tvm_objs>
+    $<TARGET_OBJECTS:tvm_runtime_objs>
     $<TARGET_OBJECTS:tvm_libinfo_objs>
     ${TVM_RUNTIME_EXT_OBJS}
   )
