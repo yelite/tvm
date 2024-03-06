@@ -77,6 +77,10 @@ TVM_REGISTER_GLOBAL("cutlass.group_gemm_e4m3_e4m3_fp16")
     .set_body_typed(
         tvm_cutlass_fp8_group_gemm<cutlass::float_e4m3_t, cutlass::float_e4m3_t, cutlass::half_t>);
 
+TVM_REGISTER_GLOBAL("cutlass.group_gemm_e4m3_e5m2_fp16")
+    .set_body_typed(
+        tvm_cutlass_fp8_group_gemm<cutlass::float_e4m3_t, cutlass::float_e5m2_t, cutlass::half_t>);
+
 }  // namespace runtime
 }  // namespace tvm
 
