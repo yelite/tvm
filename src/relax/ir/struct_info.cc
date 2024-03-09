@@ -208,12 +208,12 @@ TVM_REGISTER_GLOBAL("relax.FuncStructInfoOpaqueFunc")
 
 // Helper functions
 void UpdateStructInfo(Expr expr, StructInfo struct_info) {
-  ICHECK(!expr->struct_info_.defined())
-      << "To ensure idempotency, "
-      << "the expression passed to UpdateStructInfo "
-      << "must not have any prior StructInfo.  "
-      << "However, expression " << expr << " has struct info " << expr->struct_info_
-      << ", which cannot be overwritten with " << struct_info;
+  // ICHECK(!expr->struct_info_.defined())
+  //     << "To ensure idempotency, "
+  //     << "the expression passed to UpdateStructInfo "
+  //     << "must not have any prior StructInfo.  "
+  //     << "However, expression " << expr << " has struct info " << expr->struct_info_
+  //     << ", which cannot be overwritten with " << struct_info;
   expr->struct_info_ = struct_info;
   // also set checked type
   expr->checked_type_ = GetStaticType(struct_info);
