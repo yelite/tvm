@@ -56,7 +56,7 @@ void tvm_cutlass_fp8_group_gemm(NDArray x, NDArray weight, NDArray indptr, NDArr
   CHECK_EQ(alpha->dtype.bits, 32);
   int num_groups = weight->shape[0];
   int n = weight->shape[1];
-  int k = weight->shape[2];
+  int k = x->shape[1];
   const float* beta = nullptr;
   cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
   cutlass_group_gemm(static_cast<ElementA*>(x->data), static_cast<ElementB*>(weight->data),
