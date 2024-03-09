@@ -44,6 +44,7 @@ from ..patterns import (
     make_matmul_pattern,
     make_residual_block_pattern,
     make_rms_norm_pattern,
+    make_rms_norm_tir_pattern,
     make_stacked_attention_pattern,
 )
 from ..utils import has_leaking_intermediate_variables
@@ -469,7 +470,7 @@ def layer_norm_pattern():
     ]
 
 
-def _check_rms_norm(ctx: PatternCheckContext) -> bool:
+def _check_rms_norm_tir(ctx: PatternCheckContext) -> bool:
     rms_norm = ctx.annotated_expr["rms_norm"]
     if "rms_norm" not in rms_norm.args[0].name_hint:
         return False
@@ -483,7 +484,17 @@ def rms_norm_pattern():
         (
             "cutlass.rms_norm",
             *make_rms_norm_pattern(),
-            _check_rms_norm,
+        ),
+    ]
+
+
+def rms_norm_tir_pattern():
+    """Create a RMS norm pattern for CUTLASS."""
+    return [
+        (
+            "cutlass.rms_norm_tir",
+            *make_rms_norm_tir_pattern(),
+            _check_rms_norm_tir,
         ),
     ]
 
@@ -512,6 +523,7 @@ register_patterns(
         *attention_patterns(),
         *layer_norm_pattern(),
         *rms_norm_pattern(),
+        *rms_norm_tir_pattern(),
     ]
 )
 

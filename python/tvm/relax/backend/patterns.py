@@ -326,7 +326,7 @@ def make_layer_norm_pattern():
     return is_op("relax.nn.layer_norm")(inp, gamma, beta), {}
 
 
-def make_rms_norm_pattern():
+def make_rms_norm_tir_pattern():
     """Create a layer norm pattern."""
     inp = wildcard()
     weight = wildcard()
@@ -334,6 +334,14 @@ def make_rms_norm_pattern():
     out = is_op("relax.call_tir")(gv, TuplePattern([inp, weight]))
     annotations = {"gv": gv, "inp": inp, "rms_norm": out}
     return out, annotations
+
+
+def make_rms_norm_pattern():
+    """Create a layer norm pattern."""
+    inp = wildcard()
+    weight = wildcard()
+    out = is_op("relax.nn.rms_norm")(inp, weight)
+    return out, {}
 
 
 def make_attention_rewrite_pattern(
