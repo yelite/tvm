@@ -61,8 +61,36 @@ void tvm_cutlass_group_gemm_sm90(NDArray x, NDArray weight, NDArray indptr, NDAr
                      static_cast<ElementC*>(out->data), stream);
 }
 
+template <typename ElementA, typename ElementB, typename ElementC>
+void tvm_cutlass_group_gemm_sm90_scale(NDArray x, NDArray weight, NDArray indptr, NDArray workspace,
+                                       NDArray alpha, NDArray out) {
+  // Workspace is used for storing device-side group gemm arguments and cutlass internal workspace.
+  // Recommened size is 4MB.
+  auto func = tvm::runtime::Registry::Get("runtime.get_cuda_stream");
+  ICHECK(func != nullptr);
+  CHECK_EQ(x->ndim, 2);
+  CHECK_EQ(weight->ndim, 3);
+  CHECK_EQ(indptr->ndim, 1);
+  CHECK_EQ(workspace->ndim, 1);
+  CHECK_EQ(alpha->dtype.code, kDLFloat);
+  CHECK_EQ(alpha->dtype.bits, 32);
+  CHECK_EQ(out->ndim, 2);
+  int num_groups = weight->shape[0];
+  int n = weight->shape[1];
+  int k = weight->shape[2];
+  cudaStream_t stream = static_cast<cudaStream_t>((*func)().operator void*());
+  cutlass_group_gemm(static_cast<ElementA*>(x->data), static_cast<ElementB*>(weight->data),
+                     static_cast<int64_t*>(indptr->data), static_cast<uint8_t*>(workspace->data),
+                     workspace->shape[0], n, k, num_groups, static_cast<float*>(alpha->data),
+                     static_cast<float*>(nullptr), static_cast<ElementC*>(out->data), stream);
+}
+
 TVM_REGISTER_GLOBAL("cutlass.group_gemm_fp16_sm90")
     .set_body_typed(tvm_cutlass_group_gemm_sm90<cutlass::half_t, cutlass::half_t, cutlass::half_t>);
+
+TVM_REGISTER_GLOBAL("cutlass.group_gemm_scale_fp16_sm90")
+    .set_body_typed(
+        tvm_cutlass_group_gemm_sm90_scale<cutlass::half_t, cutlass::half_t, cutlass::half_t>);
 
 }  // namespace runtime
 }  // namespace tvm
