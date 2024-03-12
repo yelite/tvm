@@ -47,7 +47,14 @@ class DSOLibraryCache {
   std::mutex mutex_;
 };
 
-Module LoadVMModule(std::string path, Device device) {
+AllocatorType GetAllocType(std::string alloc_type_str) {
+  if (alloc_type_str == "pooled") {
+    return AllocatorType::kPooled;
+  }
+  return memory::kNaive;
+}
+
+Module LoadVMModule(std::string path, Device device, AllocatorType alloc_type) {
   static DSOLibraryCache cache;
   Module dso_mod = cache.Open(path);
   device = UseDefaultDeviceIfNone(device);
@@ -61,14 +68,14 @@ Module LoadVMModule(std::string path, Device device) {
       << "ValueError: File `" << path
       << "` is not built by RelaxVM, because `vm_initialization` does not exist";
   vm_initialization(static_cast<int>(device.device_type), static_cast<int>(device.device_id),
-                    static_cast<int>(AllocatorType::kPooled), static_cast<int>(kDLCPU), 0,
+                    static_cast<int>(alloc_type), static_cast<int>(kDLCPU), 0,
                     static_cast<int>(AllocatorType::kPooled));
   return mod;
 }
 
-NDArray DiscoEmptyNDArray(ShapeTuple shape, DataType dtype, Device device) {
-  auto allocator =
-      MemoryManager::GetOrCreateAllocator(UseDefaultDeviceIfNone(device), AllocatorType::kPooled);
+NDArray DiscoEmptyNDArray(ShapeTuple shape, DataType dtype, Device device,
+                          AllocatorType alloc_type) {
+  auto allocator = MemoryManager::GetOrCreateAllocator(UseDefaultDeviceIfNone(device), alloc_type);
   auto buffer = allocator->Alloc(shape, dtype);
   auto storage = Storage(buffer);
   return storage->AllocNDArray(/*offset=*/0, shape, dtype);
@@ -111,8 +118,19 @@ void SyncWorker() {
   }
 }
 
-TVM_REGISTER_GLOBAL("runtime.disco.load_vm_module").set_body_typed(LoadVMModule);
-TVM_REGISTER_GLOBAL("runtime.disco.empty").set_body_typed(DiscoEmptyNDArray);
+TVM_REGISTER_GLOBAL("runtime.disco.load_vm_module")
+    .set_body_typed([](std::string path, Device device, std::string alloc_type_str) {
+      auto alloc_type = GetAllocType(alloc_type_str);
+      return LoadVMModule(path, device, alloc_type);
+    });
+
+TVM_REGISTER_GLOBAL("runtime.disco.empty")
+    .set_body_typed([](ShapeTuple shape, DataType dtype, Device device,
+                       std::string alloc_type_str) {
+      auto alloc_type = GetAllocType(alloc_type_str);
+      return DiscoEmptyNDArray(shape, dtype, device, alloc_type);
+    });
+
 TVM_REGISTER_GLOBAL("runtime.disco.allreduce")
     .set_body_typed([](NDArray send, ShapeTuple reduce_kind, NDArray recv) {
       int kind = IntegerFromShapeTuple(reduce_kind);

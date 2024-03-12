@@ -121,6 +121,7 @@ class Session(Object):
         shape: Sequence[int],
         dtype: str,
         device: Optional[Device] = None,
+        alloc_type: str = "pooled",
     ) -> DRef:
         """Create an empty NDArray on all workers and attach them to a DRef.
 
@@ -141,7 +142,7 @@ class Session(Object):
         if device is None:
             device = Device(device_type=0, device_id=0)
         func = self._get_cached_method("runtime.disco.empty")
-        return func(ShapeTuple(shape), dtype, device)
+        return func(ShapeTuple(shape), dtype, device, alloc_type)
 
     def get_global_func(self, name: str) -> DRef:
         """Get a global function on workers.
@@ -249,6 +250,7 @@ class Session(Object):
         self,
         path: str,
         device: Optional[Device] = None,
+        alloc_type: str = "pooled",
     ) -> DModule:
         """Load a VM module from a file.
 
@@ -267,7 +269,7 @@ class Session(Object):
         if device is None:
             device = Device(device_type=0, device_id=0)
         func = self._get_cached_method("runtime.disco.load_vm_module")
-        return DModule(func(path, device), self)
+        return DModule(func(path, device, alloc_type), self)
 
     def init_ccl(self, ccl: str, *device_ids):
         """Initialize the underlying communication collective library.
