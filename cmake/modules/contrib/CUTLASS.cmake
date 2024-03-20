@@ -62,7 +62,7 @@ if(USE_CUDA AND USE_CUTLASS)
   set(TVM_CUTLASS_RUNTIME_SRCS "")
 
   # TODO: Should get rid of the postfix 'a' and test sm >= 90
-  if (CMAKE_CUDA_ARCHITECTURES MATCHES "90|90a")
+  if (CMAKE_CUDA_ARCHITECTURES MATCHES "90a")
     list(APPEND TVM_CUTLASS_RUNTIME_SRCS src/runtime/contrib/cutlass/fp16_group_gemm.cu)
   endif()
 
