@@ -17,6 +17,8 @@
  * under the License.
  */
 
+#include <optional>
+
 #include <cuda_fp16.h>
 #include <float.h>
 #include <tvm/runtime/ndarray.h>
