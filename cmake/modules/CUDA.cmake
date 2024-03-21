@@ -110,6 +110,11 @@ if(USE_CUDA)
   tvm_file_glob(GLOB RELAX_VM_CUDA_BUILTIN_SRC_CC src/runtime/relax_vm/cuda/*.cc)
   list(APPEND RUNTIME_SRCS ${RELAX_VM_CUDA_BUILTIN_SRC_CC})
 
+  # Add CUDA contrib kernels
+  tvm_file_glob(GLOB RUNTIME_CUDA_CONTRIB_SRC_CU src/runtime/contrib/cuda/*.cu)
+  list(APPEND RUNTIME_SRCS ${RUNTIME_CUDA_CONTRIB_SRC_CU})
+  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+
   if (USE_CUDA_FP8)
     message(STATUS "Build with CUDA FP8 support")
     add_definitions(-DUSE_CUDA_FP8=1)

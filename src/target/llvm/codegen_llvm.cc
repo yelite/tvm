@@ -2232,7 +2232,7 @@ llvm::DIType* CodeGenLLVM::GetDebugType(const Type& ty_tir, llvm::Type* ty_llvm)
     auto dwarf_type = [&]() -> llvm::dwarf::TypeKind {
       if (dtype.is_bool()) {
         return llvm::dwarf::DW_ATE_boolean;
-      } else if (dtype.is_float()) {
+      } else if (dtype.is_float() || dtype.is_float8()) {
         return llvm::dwarf::DW_ATE_float;
       } else if (dtype.is_int()) {
         return llvm::dwarf::DW_ATE_signed;
