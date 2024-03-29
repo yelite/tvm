@@ -281,15 +281,18 @@ TVM_REGISTER_GLOBAL("tvm.contrib.flash_attn.copy_blocks")
     });
 
 TVM_REGISTER_GLOBAL("tvm.contrib.flash_attn.reconstruct_from_cache")
-    .set_body_typed([](NDArray key_cache, NDArray value_cache, NDArray slot_mapping) {
+    .set_body_typed([](NDArray key_cache, NDArray value_cache, NDArray slot_mapping, NDArray key, NDArray value) {
       int num_tokens = slot_mapping->shape[0];
       int num_heads = value_cache->shape[2];
       int head_size = value_cache->shape[3];
       int block_size = value_cache->shape[1];
 
-      DLDevice dev = key_cache->device;
-      auto key = NDArray::Empty({num_tokens, num_heads, head_size}, key_cache->dtype, dev);
-      auto value = NDArray::Empty({num_tokens, num_heads, head_size}, key_cache->dtype, dev);
+      CHECK_EQ(num_tokens, value->shape[0]);
+      CHECK_EQ(num_heads, value->shape[1]);
+      CHECK_EQ(head_size, value->shape[2]);
+      CHECK_EQ(key->shape[0], value->shape[0]);
+      CHECK_EQ(key->shape[1], value->shape[1]);
+      CHECK_EQ(key->shape[2], value->shape[2]);
 
       int stride = key->shape[1] * key->shape[2];
 
@@ -304,7 +307,6 @@ TVM_REGISTER_GLOBAL("tvm.contrib.flash_attn.reconstruct_from_cache")
                             static_cast<scalar_t*>(key->data), static_cast<scalar_t*>(value->data),
                             stride, num_heads, head_size, block_size);
 
-      return Array{key, value};
     });
 
 }  // namespace runtime
