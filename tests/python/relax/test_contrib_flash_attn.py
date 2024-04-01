@@ -154,6 +154,8 @@ def test_reconstruct_from_cache():
     key = tvm.nd.array(np.random.randn(num_tokens, num_heads, head_dim).astype("float16"), dev)
     value = tvm.nd.array(np.random.randn(num_tokens, num_heads, head_dim).astype("float16"), dev)
     slot_mapping = tvm.nd.array(np.arange(num_tokens).astype("int32"), dev)
+    reconstructed_key = tvm.nd.empty((num_tokens, num_heads, head_dim), dtype=key.dtype, device=dev)
+    reconstructed_value = tvm.nd.empty((num_tokens, num_heads, head_dim), dtype=value.dtype, device=dev)
 
     k_cache = tvm.nd.array(
         np.random.randn(num_blocks, block_size, num_heads, head_dim).astype(
@@ -169,10 +171,10 @@ def test_reconstruct_from_cache():
     reconstruct_from_cache_func = tvm.get_global_func("tvm.contrib.flash_attn.reconstruct_from_cache")
 
     update_cache_func(key, value, k_cache, v_cache, slot_mapping)
-    out = reconstruct_from_cache_func(k_cache, v_cache, slot_mapping)
+    reconstruct_from_cache_func(k_cache, v_cache, slot_mapping, reconstructed_key, reconstructed_value)
 
-    np.testing.assert_equal(key.numpy(), out[0].numpy())
-    np.testing.assert_equal(value.numpy(), out[1].numpy())
+    np.testing.assert_equal(key.numpy(), reconstructed_key.numpy())
+    np.testing.assert_equal(value.numpy(), reconstructed_value.numpy())
 
 
 if __name__ == "__main__":
